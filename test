@@ -1,0 +1,2853 @@
+package sg.com.mobileeftpos.paymentapplication.globalFuns;
+
+
+import static sg.com.mobileeftpos.paymentapplication.globalDef.GlobalDefine.GET;
+import static sg.com.mobileeftpos.paymentapplication.globalDef.GlobalDefine.OK;
+import static sg.com.mobileeftpos.paymentapplication.globalDef.GlobalDefine.PRINT_MAX_CHAR_PER_LINE_SMALL;
+import static sg.com.mobileeftpos.paymentapplication.globalDef.GlobalDefine.SIGCAP_UPLOAD_KO;
+import static sg.com.mobileeftpos.paymentapplication.globalDef.GlobalDefine.SIGCAP_UPLOAD_OK;
+import static sg.com.mobileeftpos.paymentapplication.globalDef.GlobalDefine.TAG;
+import static sg.com.mobileeftpos.paymentapplication.globalDef.GlobalDefine.VOID_TRUE;
+import static sg.com.mobileeftpos.paymentapplication.globalDef.StGlobalex.field_39;
+import static sg.com.mobileeftpos.paymentapplication.globalDef.StGlobalex.field_63;
+import static sg.com.mobileeftpos.paymentapplication.globalFuns.ECRConfig.ECR_39_RESPONSE_TIMEOUT;
+import static sg.com.mobileeftpos.paymentapplication.pax.constants.Constants.TIME_PATTERN_TRANS;
+
+import android.os.SystemClock;
+import android.text.TextUtils;
+import android.util.Log;
+
+import com.google.gson.Gson;
+import com.nexgo.common.ByteUtils;
+import com.nexgo.common.TlvUtils;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+
+import sg.com.mobileeftpos.paymentapplication.ApplicationEventReceiver;
+import sg.com.mobileeftpos.paymentapplication.activities.SettlementActivity;
+import sg.com.mobileeftpos.paymentapplication.appController.AppController;
+import sg.com.mobileeftpos.paymentapplication.appController.Singleton;
+import sg.com.mobileeftpos.paymentapplication.db.BATCH_FILE;
+import sg.com.mobileeftpos.paymentapplication.db.CURR_FILE;
+import sg.com.mobileeftpos.paymentapplication.db.HDT_FILE;
+import sg.com.mobileeftpos.paymentapplication.db.SIG_DATA_FILE;
+import sg.com.mobileeftpos.paymentapplication.db.SIG_FILE;
+import sg.com.mobileeftpos.paymentapplication.globalDef.GlobalDefine;
+import sg.com.mobileeftpos.paymentapplication.globalDef.StGlobalex;
+import sg.com.mobileeftpos.paymentapplication.globalDef.TransactionConfig;
+import sg.com.mobileeftpos.paymentapplication.model.Controller;
+import sg.com.mobileeftpos.paymentapplication.model.LMSModel;
+import sg.com.mobileeftpos.paymentapplication.model.LmsSettleModel;
+import sg.com.mobileeftpos.paymentapplication.model.TransData;
+import sg.com.mobileeftpos.paymentapplication.pax.PayUtils;
+import sg.com.mobileeftpos.paymentapplication.pax.actions.qrpayment.QRUtils;
+import sg.com.mobileeftpos.paymentapplication.pax.component.Component;
+import sg.com.mobileeftpos.paymentapplication.pax.device.Device;
+import sg.com.mobileeftpos.paymentapplication.pax.eventbus.DrmsUploadService;
+import sg.com.mobileeftpos.paymentapplication.receiptPrint.ReceiptPrint;
+import sg.com.mobileeftpos.paymentapplication.supportutils.AlertUtils;
+import sg.com.mobileeftpos.paymentapplication.supportutils.CommonUtils;
+import sg.com.mobileeftpos.paymentapplication.transactionProcess.EmvProcess;
+import sg.com.mobileeftpos.paymentapplication.utils.AppUtils;
+import sg.com.mobileeftpos.paymentapplication.utils.BaseUtils;
+import sg.com.mobileeftpos.paymentapplication.utils.Constants;
+import sg.com.mobileeftpos.paymentapplication.utils.LmsPrintUtils;
+import sg.com.mobileeftpos.paymentapplication.utils.LogUtils;
+import sg.com.mobileeftpos.paymentapplication.utils.ToastUtils;
+
+/**
+ * Created by Lenovo on 4/18/2018.
+ */
+
+public class Signaturecapture {
+
+    private static int inGSigCapTableIndex = 1; // default is always the first index
+    private static int nGUploadStatus = 0;
+    private final PayConfig payConfig = Singleton.getPayConfigObj();
+    private final PayTaskCom payTaskCom = Singleton.getPayTaskComObj();
+    private final PayServicesCommon payServicesCommon = Singleton.getPayServicesCommonObj();
+    // DE56
+    private final String SIGCAP_V_RECEIPT_LAYOUT_NORMAL_DEMO = "0001";
+    private final String SIGCAP_V_RECEIPT_LAYOUT_NORMAL = "0002";
+    private final String SIGCAP_V_RECEIPT_LAYOUT_TRAVELEX = "0003";
+    private final String SIGCAP_V_RECEIPT_LAYOUT_IPP = "0004";
+    private final String SIGCAP_V_RECEIPT_LAYOUT_LMS = "0005";
+    private final String SIGCAP_V_RECEIPT_LAYOUT_EVOUCHER = "0006";
+    private final String SIGCAP_V_RECEIPT_LAYOUT_QR = "0007";
+    private String transTimeStamp;
+    private final String SIGCAP_V_RECEIPT_LAYOUT_AMEX_EPP = "0010";
+    private final String PAYSYS_SIGCAP_ENCRYPTION_TYPE_1 = "0001";
+    private final String DEFAULT_SIGCAP_CONFIG_INDEX = "1";
+    private final String SC_T_RECEIPT_HEADER_MERCHANT_NAME = "0001";
+    private final String SC_T_RECEIPT_HEADER_ADDRESS_LINE_1 = "0002";
+    private final String SC_T_RECEIPT_HEADER_ADDRESS_LINE_2 = "0003";
+    private final String SC_T_RECEIPT_HEADER_ADDRESS_LINE_3 = "0004";
+    private final String SC_T_RECEIPT_HEADER_ADDRESS_LINE_4 = "0005";
+    private final String SC_T_RECEIPT_HEADER_ADDRESS_LINE_5 = "0006";
+    private final String SC_T_RECEIPT_HEADER_ADDRESS_LINE_6 = "0007";
+    private final String SC_T_TRANS_TYPE_PURCHASE = "0001";
+    private final String SC_T_TRANS_TYPE_REVERSAL = "0002";
+    private final String SC_T_TRANS_TYPE_OFFLINE = "0003";
+    /* TRANS TYPES */
+    private final String SC_T_TRANS_TYPE_INIT_SETTLE = "0004";
+    private final String SC_T_TRANS_TYPE_END_SETTLE = "0005";
+    private final String SC_T_TRANS_TYPE_BATCHXFER = "0006";
+    private final String SC_T_TRANS_TYPE_VOID = "0007";
+    private final String SC_T_TRANS_TYPE_LOGON = "0008";
+    private final String SC_T_TRANS_TYPE_AUTH = "0009";
+    private final String SC_T_TRANS_TYPE_REFUND = "0010";
+    private final String SC_T_TRANS_TYPE_ADJUST = "0011";
+    private final String SC_T_TRANS_TYPE_VOID_ADJUST = "0012";
+    private final String SC_T_TRANS_TYPE_SALECOMP = "0013";
+    private final String SC_T_TRANS_TYPE_VOID_SALECOMP = "0014";
+    private final String SC_T_TRANS_TYPE_BALANCE = "0015";
+    private final String SC_T_TRANS_TYPE_EMV_SALE = "0018";
+    private final String SC_T_TRANS_TYPE_EMV_OFFLINE = "0019";
+    private final String SC_T_TRANS_TYPE_EMV_OFFLINETC = "0020";
+    private final String SC_T_TRANS_TYPE_PIGGYBACK = "0021";
+    private final String SC_V_ENTRY_MODE_CLESS = "070";
+    private final String SC_V_ENTRY_MODE_CHIP = "050";
+    private final String SC_V_ENTRY_MODE_FALLBACK = "800";
+    private final String SC_V_ENTRY_MODE_SWIPE = "020";
+    private final String SC_V_ENTRY_MODE_MANUAL = "010";
+    private final String SC_V_ENTRY_MODE_QRBARCODE = "090";
+    private final int SC_T_TRANSACTION_ROOT = 1; // root node containing transaction data, refer to TRECORD_T for list of tags
+    private final int SC_T_TOTALS_ROOT = 2; // root node containing the batch totals info, list of tags are different from SC_T_TRANSACTION_ROOT refer to PaySettlement.TREPORT_T
+    private final String SC_T_RECEIPT_BODY_INVOICE_NUMBER = "0001";
+    private final String SC_T_RECEIPT_BODY_AID = "0002";
+    private final String SC_T_RECEIPT_BODY_TC = "0003";
+    private final String SC_T_RECEIPT_BODY_TVR = "0004";
+    private final String SC_T_RECEIPT_BODY_TSI = "0005";
+    private final String SC_T_RECEIPT_BODY_ADD_DATA = "0006";
+    private final String SC_T_RECEIPT_BODY_BATCH_NUMBER = "0012";
+    private final String SC_T_RECEIPT_BODY_CARD_LABEL = "0014"; // card label Visa/Mastercard
+    private final String SC_T_RECEIPT_BODY_EMV_APP_LABEL = "0015"; // emv lable ie. Credito De Visa etc..
+    private final String SC_T_RECEIPT_BODY_HOST_LABEL = "0016";
+    private final String SC_T_RECEIPT_BODY_HOST_CURRENCY = "0017";
+    private final String SC_T_RECEIPT_BODY_ENTRY_MODE = "0018";// string value PAYPASS/PAYWAVE/EMV CHIP
+    private final String SC_T_RECEIPT_BODY_TRANS_TYPE_STR = "0019"; // trans type that is printed on the top of receipt "EMV SALE" "REFUND" "PREAUTH" etc...
+    private final String SC_T_RECEIPT_BODY_ATC = "0021"; // EMV data ATC (applicable to CUP only)
+    private final String SC_T_RECEIPT_BODY_IPP_PERIOD = "0400";
+    private final String SC_T_RECEIPT_BODY_IPP_PAYM_LABEL = "0401";
+    private final String SC_T_RECEIPT_BODY_IPP_MONTHLY_AMOUNT = "0402";
+    private final String SC_T_RECEIPT_BODY_IPP_FINAL_AMOUNT = "0403";
+    private final String SC_T_RECEIPT_BODY_IPP_INTEREST_RATE = "0404";
+    private final String SC_T_RECEIPT_BODY_IPP_TOTAL_INTEREST = "0405";
+    private final String SC_T_RECEIPT_BODY_IPP_ORIGINAL_AMOUNT = "0406";
+    private final String SC_T_RECEIPT_BODY_IPP_FIRST_PAYMENT = "0407";    // OCBC
+    private final String SC_T_RECEIPT_BODY_IPP_SUBSEQUENT_PAYMENT = "0408"; // OCBC
+    private final String SC_T_RECEIPT_FOOTER_DISCLAIMER_1 = "0001";
+    private final String SC_T_RECEIPT_FOOTER_DISCLAIMER_2 = "0002";
+    private final String SC_T_RECEIPT_FOOTER_DISCLAIMER_3 = "0003";
+    private final String SC_T_RECEIPT_FOOTER_FOOTNOTE_1 = "0004";
+    private final String SC_T_RECEIPT_FOOTER_FOOTNOTE_2 = "0005";
+    private final String SC_T_RECEIPT_DRMS_TNAME = "0100";
+
+    String SC_T_RECEIPT_BODY_RWS_UTRN = "0500";
+    String SC_T_RECIEPT_BODY_RWS_ORIGINAL_UTRN = "0501";
+
+    String PAYSYS_SIGCAP_ENCRYPTION_DISABLE = "0000";
+    /******************************************************/
+    String SC_T_RECEIPT_HEADER_DEMO = "0000";
+    String SC_T_TRANS_TYPE_TEST_NAC = "0016";
+    // Teck: CUP trans type not applicable in DBS app.
+    String SC_T_TRANS_TYPE_CUP_PURCHASE = "0022";
+    String SC_T_TRANS_TYPE_CUP_VOID = "0023";
+    String SC_T_TRANS_TYPE_CUP_PRE_AUTH = "0024";
+    String SC_T_TRANS_TYPE_CUP_PRE_AUTH_VOID = "0025";
+    String SC_T_TRANS_TYPE_CUP_PRE_CONF = "0026";
+    String SC_T_TRANS_TYPE_CUP_PRE_CONF_VOID = "0027";
+    String SC_T_TRANS_TYPE_CUP_REFUND = "0028";
+    String SC_T_TRANS_TYPE_CUP_ADJUST = "0029";
+    String SC_T_TRANS_TYPE_CUP_TLE_LOGON = "0030";
+    String SC_T_TRANS_TYPE_CUP_ASSOCIATION = "0031";
+
+    /////////////////////////////////////////////
+
+    public static final String SC_T_RECEIPT_BODY_LMS_LABEL = "0100";
+    public static final String SC_T_RECEIPT_BODY_LMS_REDEEM_AMOUNT = "0101";
+    public static final String SC_T_RECEIPT_BODY_LMS_NETT_AMOUNT = "0102";
+    public static final String SC_T_RECEIPT_BODY_LMS_REBATE = "0103";
+    public static final String SC_T_RECEIPT_BODY_LMS_ISSUED_AMOUNT = "0104";
+    public static final String SC_T_RECEIPT_BODY_LMS_NEW_BALANCE = "0105";
+    public static final String SC_T_RECEIPT_BODY_LMS_TRACE = "0106";
+    public static final String SC_T_RECEIPT_BODY_LMS_POINT_BALANCE = "0107"; // TODO
+
+    public static final String SC_T_RECEIPT_BODY_LMS_FULL_REDEEM_TOTAL_COUNT = "0110"; // Full Redemption
+    public static final String SC_T_RECEIPT_BODY_LMS_FULL_REDEEM_TOTAL_AMOUNT = "0111";
+    public static final String SC_T_RECEIPT_BODY_LMS_PARTIAL_REDEEM_TOTAL_COUNT = "0112"; // Partial Redemption
+    public static final String SC_T_RECEIPT_BODY_LMS_PARTIAL_REDEEM_TOTAL_AMOUNT = "0113";
+    public static final String SC_T_RECEIPT_BODY_LMS_ISSUED_TOTAL_COUNT = "0114"; // Issued
+    public static final String SC_T_RECEIPT_BODY_LMS_ISSUED_TOTAL_AMOUNT = "0115";
+    public static final String SC_T_RECEIPT_BODY_LMS_NETT_TOTAL_AMOUNT = "0116"; // Nett
+    public static final String SC_T_RECEIPT_BODY_LMS_OFFLINE_TOTAL_COUNT = "0117"; // Offline
+    public static final String SC_T_RECEIPT_BODY_LMS_OFFLINE_TOTAL_AMOUNT = "0118";
+
+
+    //////////////////////////////////////////////////////
+    int SIGCAP_UPLOAD_ABORTED = 2;
+    String MAX_GZ_SIZE_UPLOAD_STR = "900";//900 // maximum size of the GZ file in each payload.
+    int SIGNATURE_OFFSET_DATA_SIZE = 2;
+    /* list of transaction record tags to be used in TLVTREE (very similar to batchrecord structure)
+     * For backward compatability, please do not modify the tag numbers.
+     * If you want to add a new type of data, please add it at the end if the list using a new tag ID
+     */
+    int TRECORD_T_TID = 1;
+    int TRECORD_T_MID = 2;
+    int TRECORD_T_TRANS_TYPE = 3;
+    int TRECORD_T_TRANS_MODE = 4;
+    int TRECORD_T_VOIDED = 5;
+    int TRECORD_T_UPLOADED = 6;
+    int TRECORD_T_PROC_CODE = 7;
+    int TRECORD_T_INVOICE = 8;
+    int TRECORD_T_AMOUNT = 9;
+    int TRECORD_T_TIP_AMOUNT = 10;
+    int TRECORD_T_TIME = 11;
+    int TRECORD_T_DATE = 12;
+    int TRECORD_T_ORG_MESSAGE_ID = 13;
+    int TRECORD_T_SYSTEM_TRACE = 14;
+    int TRECORD_T_EXPIRY_DATE = 15;
+    int TRECORD_T_RRN = 16;
+    int TRECORD_T_APPROVAL_CODE = 17;
+    int TRECORD_T_RESPONSE_CODE = 18;
+    int TRECORD_T_ACCOUNT_NUMBER = 19;
+    int TRECORD_T_PERSON_NAME = 20;
+    int TRECORD_T_ORIGINAL_AMOUNT = 21;
+    int TRECORD_T_ADDITIONAL_DATA = 22;
+    int TRECORD_T_PAYMENT_TERM_INFO = 23;
+    int TRECORD_T_PRI_ACCOUNT_NUM = 24;
+    int TRECORD_T_POS_ENTRY_MODE = 25;
+    int TRECORD_T_NII = 26;
+    int TRECORD_T_POS_COND_CODE = 27;
+    int TRECORD_T_ADD_AMOUNT = 28;
+    int TRECORD_T_CARD_TYPE = 29;
+    int TRECORD_T_CARD_SEQUENCE = 30;
+    int TRECORD_T_CHIP_DATA = 31;
+    int TRECORD_T_TVR = 32;
+    int TRECORD_T_TSI = 33;
+    int TRECORD_T_TRANS_CRYPTO = 34;
+    int TRECORD_T_SCRIPT71 = 35;
+    int TRECORD_T_SCRIPT72 = 36;
+    int TRECORD_T_AID = 37;
+    int TRECORD_T_APPLICATION_LABEL = 38;
+    int TRECORD_T_SIGNATURE_REQ = 39;
+    int TRECORD_T_SIGCAP_GZ_DATA = 40; // gzipped signature image
+    int TRECORD_T_SIGCAP_DATA_ID = 41;
+    int TRECORD_T_SIGCAP_RECEIPT_ID = 42;
+    int TRECORD_T_SIGCAP_ENCRYPTION_ID = 43;
+    int TRECORD_T_SIGCAP_TRANS_UPLOAD_REQ = 44;
+    int TRECORD_T_SIGCAP_SIGN_UPLOAD_REQ = 45;
+    int TRECORD_T_SIGCAP_TRANS_UPDATE_REQ = 46; // deprecated
+    int TRECORD_T_SIGCAP_GZ_UPLOADED_OFFSET = 47;
+    int TRECORD_T_BATCH_NUMBER = 48;
+    int TRECORD_T_HOST_TYPE = 49;
+    int TRECORD_T_HOST_LABEL = 50; // hdt label
+    int TRECORD_T_CARD_LABEL = 51; // ctt label
+    int TRECORD_T_MASK_FORMAT = 52;
+    int TRECORD_T_TRANS_CURRENCY_LABEL = 53; // label of currency ie. SGD
+    int TRECORD_T_LMS_LABEL = 54; // label of LMS ie. Daily$ Cap$ etc..
+    int TRECORD_T_TRANS_TYPE_PRINT_STRING = 55; // "EMV SALE" "IPP SALE" "LMS SALE" ... as printed on the terminal receipt.
+    int TRECORD_T_ENTRY_MODE_PRINT_STRING = 56; // "EMV CHIP" "FALLBACK" "PAYPASS" etc..
+    int TRECORD_T_PREAUTH_REF = 57; // DBS MC501 reference number
+    int TRECORD_T_ADJUSTED = 58; // flag to indicate adjustment is performed on this particular transaction.
+
+
+    /******************************************************/
+    int TRECORD_T_ATC = 59; // EMV data ATC (for CUP receipt printing)
+    int TRECORD_T_SIGCAP_CONFIG_INDEX = 60; // Index number to the sigcap config table record associated with this transaction
+    int TRECORD_T_SIGCAP_HARDWARE_TYPE = 61; // Indicator on status of sigcap hardware device
+    int TRECORD_T_DCC_FOREIGN_CURRENCY_LABEL = 62; // DCC foreign currency label ie USD AUD EUR
+    int TRECORD_T_DCC_FX_RATE = 63; // DCC fx rate
+    int TRECORD_T_DCC_MARGINS_MARKUP = 64; // DCC margins or markup
+    int TRECORD_T_DCC_FOREIGN_AMOUNT = 65; // DCC foreign amount
+    int TRECORD_T_DCC_FX_TRACE_NUMBER = 66; // DCC trace number or FXTTN
+    int TRECORD_T_DCC_OPERATOR_ID = 67; // DCC operator ID entered by merchant
+    int TRECORD_T_DCC_FOREIGN_CURRENCY_EXPONENT = 68;// DCC foreign amount exponent
+    int TRECORD_T_AMEX_EPP_TERM = 69; // AMEX EPP number of months for installment, if tag is not present or value is zero, it means that the transaction is non-EPP.
+    int TRECORD_T_IS_LMS_TRANS = 70; // "1" if true that this transaction is LMS
+    int TRECORD_T_LMS_IS_NOT_AVAILABLE = 71; // LMS is temporary not available, aka host down
+    int TRECORD_T_LMS_REDEEM_AMOUNT = 72;
+    int TRECORD_T_LMS_ORIGINAL_AMOUNT = 73;
+    int TRECORD_T_LMS_REBATE = 74;
+    int TRECORD_T_LMS_AWARD_AMOUNT = 75;
+    int TRECORD_T_LMS_BALANCE = 76;
+    int TRECORD_T_LMS_TRACE = 77;
+    int TRECORD_T_RWS_UTRN = 78; // UTRN
+    int TRECORD_T_RWS_ORI_UTRN = 79; // Original UTRN
+    int TRECORD_T_RWS_BANK_TID = 80; // The actual Bank's TID used by Wirecard to perform transaction for RWS.
+    // 2017102500 Teck: Added Alipay into DRMS
+    int TRECORD_T_BCODE_EXTENDED_INFO = 81;
+    int TRECORD_T_BCODE_BUYER_CODE = 82;
+    int TRECORD_T_BCODE_ALI_PTRANS_ID = 83;
+    int TRECORD_T_BCODE_ALI_TRNSID = 84;
+    int TRECORD_T_BCODE_ALI_RFNDID = 85;
+    /**
+     * To be used in DE61
+     **/
+    String SC_T_RECEIPT_BODY_DEMO = "0000";
+    String SC_T_RECEIPT_BODY_IPP_TENURE = "0007";
+    String SC_T_RECEIPT_BODY_IPP_MONTHLY = "0008";
+    String SC_T_RECEIPT_BODY_IPP_LAST = "0009";
+    String SC_T_RECEIPT_BODY_IPP_HANDLING = "0010";
+
+    /******************************************************/
+    String SC_T_RECEIPT_BODY_IPP_INTEREST = "0011";
+    String SC_T_RECEIPT_BODY_SETTLEMENT_DATA = "0013";
+    String SC_T_RECEIPT_BODY_PREAUTH_REF = "0020"; // related to MC501
+    String SC_T_RECEIPT_BODY_BATCH_GROUP = "0022"; // 2016071301 Teck: DRMS - terminal Send to Batch Group (tag22) to DRMS during settlement only, Batch group feature for Atlas Vending.
+    /**
+     * To be used in DE62
+     **/
+    String SC_T_RECEIPT_FOOTER_DEMO = "0000";
+    String SC_T_RECEIPT_FOOTER_RWS_BANK_TID = "0006"; // Bank's Terminal ID used by Wirecard to perform the transaction.
+    private List<Map<String, String>> ttGUploadData;
+
+    public void vdSigCapTermReg() {
+        // 2015063000: Demo Mode - DRMS registration is not working when demo mode is enabled for DRMS
+        AppController.getApp().runOnUiThread(() -> {
+            AlertUtils.showProcessingDialog("DRMS REGISTERING");
+
+        });
+
+        payConfig.fSetGetDEMOConfig(GlobalDefine.GET);
+
+
+        int status = SignatureRegisterTerminal();
+
+        AppController.getApp().runOnUiThread(() -> {
+            SystemClock.sleep(300);
+            AlertUtils.dismissAllProgressDialogs();
+        });
+
+        if (status != OK) {
+            payTaskCom.inDisconnection();
+            payConfig.fSetGetDEMOConfig(GlobalDefine.GET);
+            AlertUtils.restoreHomScreen();
+        }
+
+    }
+
+    /* 2015021301 Teck: For terminal that supports Sigcap, registration is now mandatory before it is able to start accepting transactions.
+     * This function checks every HDT to determine if Sigcap feature is enabled,
+     * If yes, it will mark the HDT for registration by setting the HDT_HOST_ENABLED flag to HDT_REGISTRATION_REQ
+     * Subsequently if registration is successful, HDT_HOST_ENABLED will be set back to HDT_ENABLED
+     * Rationale: This is to prevent HDT to be used in the event registration is not successfully perfomed during terminal setup/preparation which
+     * may cause failure during signature upload and stacking huge amount of un-uploaded transactions.
+     */
+    public void vdSigCapMarkHDTRegistration() {
+        int i = 0;
+
+        // determine all HDTs that has got sigcap enabled, HDT_REGISTRATION_REQ
+        for (i = 1; i <= StGlobalex.MAX_HDT; i++) {
+            // Open HDT struct
+            if (payConfig.inGetSetHDTConfig(GlobalDefine.GET, String.format("%02d", i)) != GlobalDefine.OK)
+                break;
+
+            HDT_FILE stGHDTStruct = StGlobalex.hdtFile;
+            // check to make sure HDT is enabled
+            if (stGHDTStruct.getHDT_HOST_ENABLED().getBytes()[0] == GlobalDefine.HDT_ENABLED) {
+                // fetch the sigcap config index from HDT
+                if (Integer.parseInt(stGHDTStruct.getHDT_SIGCAP_INDEX()) > 0)
+                    SetSigCapConfigIndex(Integer.parseInt(stGHDTStruct.getHDT_SIGCAP_INDEX()));
+                else
+                    continue; // sigcap is not enabled for this particular hdt
+
+                payConfig.inGetSIGConfig(GlobalDefine.GET, String.format("%02d", Integer.parseInt(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX())));
+                // check if sigcap is enabled
+                if (IsSigCapEnabled() == GlobalDefine.OK) {
+                    // mark it to HDT_REGISTRATION_REQ
+                    stGHDTStruct.setHDT_HOST_ENABLED(String.format("%c", GlobalDefine.HDT_REGISTRATION_REQ));
+                    payConfig.inGetSetHDTConfig(GlobalDefine.SET, String.format("%02d", i));
+                }
+            }
+        }
+
+    }
+
+
+    private int SignatureRegisterTerminal() {
+        String xDate;
+        Date today = new Date();
+        SimpleDateFormat format = new SimpleDateFormat("yyMMddhhmmss");
+        xDate = format.format(today);
+        HDT_FILE stGHDTStruct;
+
+        // loop through each enabled HDT to register their respective TID
+        for (StGlobalex.inGHDT = 1; StGlobalex.inGHDT <= StGlobalex.MAX_HDT; StGlobalex.inGHDT++) {
+
+            // Open HDT struct
+            if (payConfig.inGetHDTConfig(GlobalDefine.GET, String.format("%02d", StGlobalex.inGHDT)) == null)
+                break;
+
+            stGHDTStruct = StGlobalex.hdtFile;
+
+            // check to make sure HDT is enabled //HDT_REGISTRATION_REQ amended the below line from this
+            if ((stGHDTStruct.getHDT_HOST_ENABLED().getBytes()[0] != GlobalDefine.HDT_ENABLED)
+                    && (stGHDTStruct.getHDT_HOST_ENABLED().getBytes()[0] != GlobalDefine.HDT_REGISTRATION_REQ)) // Only register HDTs that needs to be registered
+                continue;
+
+            // fetch the sigcap config index from HDT
+
+            if (Integer.parseInt(stGHDTStruct.getHDT_SIGCAP_INDEX()) > 0)
+                SetSigCapConfigIndex(Integer.parseInt(stGHDTStruct.getHDT_SIGCAP_INDEX()));
+            else
+                continue; // sigcap is not enabled for this particular hdt
+
+            if (payConfig.inGetSIGConfig(GlobalDefine.GET, String.format("%02d", Integer.parseInt(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX()))) != GlobalDefine.OK)
+                continue;
+            if (IsSigCapEnabled() != GlobalDefine.OK)
+                continue;
+
+            if (GetSigCapCOMIndex() == 0)
+                continue;
+
+            if (payConfig.inGetSetCOMConfig(GlobalDefine.GET, String.format("%02d", GetSigCapCOMIndex())) != GlobalDefine.OK) {
+
+                continue;
+            }
+
+            // disable demo mode for the time being
+            StGlobalex.inGTransaction = TransactionConfig.PAYSYS_SC_TERM_REG_TID;
+
+            if (StGlobalex.hdtFile.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.AMEX_HOST &&
+                    Singleton.getPayServicesObj().IsAmexEppHost() == GlobalDefine.OK)
+                vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_AMEX_EPP); // 20190201 Venkat: DRMS - Terminal will use a new DRMS receipt layout ID for AMEX EPP due to the
+            else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals(GlobalDefine.INSTALMENT_HOST))
+                vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_IPP);// 2017071202 Teck: DRMS - Terminal will use a new DRMS receipt layout ID for OCBC IPP due to the
+            else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals((GlobalDefine.PINBASED_CUP_HOST)))
+                vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_IPP);
+            else if (stGHDTStruct.getHDT_HOST_TYPE().equals(GlobalDefine.ALIPAY_HOST))
+                vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_QR);
+            else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.DBS_BANK && LmsManager.getInstance().isLMSHost())
+                vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_LMS);
+            else
+                vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_NORMAL);
+
+
+            {
+                // Field_12 HHMMSS
+                StGlobalex.field_12 = xDate.substring(6, 6 + 6);
+
+
+                // Field_13 YYMM
+                StGlobalex.field_13 = xDate.substring(0, 4);
+
+
+                // Field_60
+                StGlobalex.field_60 = "";
+
+                if (!(StGlobalex.cfgMerchantFile.getMERCHANT_NAME() == null || StGlobalex.cfgMerchantFile.getMERCHANT_NAME().isEmpty()))
+                    StGlobalex.field_60 = AddSigCapTLVData(StGlobalex.field_60, SC_T_RECEIPT_HEADER_MERCHANT_NAME, StGlobalex.cfgMerchantFile.getMERCHANT_NAME().length(), StGlobalex.cfgMerchantFile.getMERCHANT_NAME());
+                if (!(StGlobalex.cfgMerchantFile.getADDRESS_LINE1() == null || StGlobalex.cfgMerchantFile.getADDRESS_LINE1().isEmpty()))
+                    StGlobalex.field_60 = AddSigCapTLVData(StGlobalex.field_60, SC_T_RECEIPT_HEADER_ADDRESS_LINE_1, StGlobalex.cfgMerchantFile.getADDRESS_LINE1().length(), StGlobalex.cfgMerchantFile.getADDRESS_LINE1());
+                if (!(StGlobalex.cfgMerchantFile.getADDRESS_LINE2() == null || StGlobalex.cfgMerchantFile.getADDRESS_LINE2().isEmpty()))
+                    StGlobalex.field_60 = AddSigCapTLVData(StGlobalex.field_60, SC_T_RECEIPT_HEADER_ADDRESS_LINE_2, StGlobalex.cfgMerchantFile.getADDRESS_LINE2().length(), StGlobalex.cfgMerchantFile.getADDRESS_LINE2());
+                if (!(StGlobalex.cfgMerchantFile.getADDRESS_LINE3() == null || StGlobalex.cfgMerchantFile.getADDRESS_LINE3().isEmpty()))
+                    StGlobalex.field_60 = AddSigCapTLVData(StGlobalex.field_60, SC_T_RECEIPT_HEADER_ADDRESS_LINE_3, StGlobalex.cfgMerchantFile.getADDRESS_LINE3().length(), StGlobalex.cfgMerchantFile.getADDRESS_LINE3());
+                if (!(StGlobalex.cfgMerchantFile.getADDRESS_LINE4() == null || StGlobalex.cfgMerchantFile.getADDRESS_LINE4().isEmpty()))
+                    StGlobalex.field_60 = AddSigCapTLVData(StGlobalex.field_60, SC_T_RECEIPT_HEADER_ADDRESS_LINE_4, StGlobalex.cfgMerchantFile.getADDRESS_LINE4().length(), StGlobalex.cfgMerchantFile.getADDRESS_LINE4());
+                if (!(StGlobalex.cfgMerchantFile.getMERCHANT_HEADER1() == null || StGlobalex.cfgMerchantFile.getMERCHANT_HEADER1().isEmpty()))
+                    StGlobalex.field_60 = AddSigCapTLVData(StGlobalex.field_60, SC_T_RECEIPT_HEADER_ADDRESS_LINE_5, StGlobalex.cfgMerchantFile.getMERCHANT_HEADER1().length(), StGlobalex.cfgMerchantFile.getMERCHANT_HEADER1());
+                if (!(StGlobalex.cfgMerchantFile.getMERCHANT_HEADER2() == null || StGlobalex.cfgMerchantFile.getMERCHANT_HEADER2().isEmpty()))
+                    StGlobalex.field_60 = AddSigCapTLVData(StGlobalex.field_60, SC_T_RECEIPT_HEADER_ADDRESS_LINE_6, StGlobalex.cfgMerchantFile.getMERCHANT_HEADER2().length(), StGlobalex.cfgMerchantFile.getMERCHANT_HEADER2());
+
+                // since trace will be used we'll increase it.
+                payConfig.vdUpdateSystemTrace();
+
+                int inError = payTaskCom.vdAssembleSDLCPacket();
+
+                if (inError != GlobalDefine.OK) {
+                    StGlobalex.MessageToDisplay = "SIGCAP REG. CONN. ERROR";
+                    ApplicationEventReceiver.ecrResponse.setResponse_code(ECRConfig.ECR_39_CONNECTION_ERROR);
+                    break;
+                }
+
+                inError = payTaskCom.TcpConnectivity();
+                if (inError != GlobalDefine.OK) {
+                    if (inError != GlobalDefine.ERROR) {
+                        StGlobalex.MessageToDisplay = "SIGCAP REG. CONN. ERROR";
+                        ApplicationEventReceiver.ecrResponse.setResponse_code(ECRConfig.ECR_39_CONNECTION_ERROR);
+                    } else {
+                        StGlobalex.MessageToDisplay = "SIGCAP REG. RESPONSE TIMEOUT";
+                        ApplicationEventReceiver.ecrResponse.setResponse_code(ECR_39_RESPONSE_TIMEOUT);
+                    }
+                    StGlobalex.rCardStatus = GlobalDefine.OK;
+                    break;
+                }
+                if (payTaskCom.inProcessPacket(StGlobalex.byResponseData, StGlobalex.inRequestSize) != GlobalDefine.OK) {
+                    if (!AppUtils.isEmpty(field_39)) {
+                        int inErr = new PayTaskCom().inDisplayResponseCode();//promting
+                        StGlobalex.MessageToDisplay = "SIGCAP REG." + StGlobalex.MessageToDisplay;
+                        ApplicationEventReceiver.ecrResponse.setResponse_code(field_39);
+                        StGlobalex.rCardStatus = GlobalDefine.OK;
+                    } else {
+                        StGlobalex.MessageToDisplay = "SIGCAP REG. RESPONSE ERROR";
+                        ApplicationEventReceiver.ecrResponse.setResponse_code(field_39);
+                        StGlobalex.rCardStatus = GlobalDefine.OK;
+                    }
+
+
+                    break;
+                }
+
+
+                if (StGlobalex.field_39.equals(GlobalDefine.DEF_DE39_V_APPROVE)) {
+
+                    if (stGHDTStruct.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.OCBC_BANK /*&& isLMSHost() && inRegisterLMSNormal == 0*/) {
+                        // LMS needs to be registered with both LMS Receipt Version & Normal Receipt Version
+                        vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_NORMAL);
+                    }
+
+                    // HDT can now be used, set the HDT_HOST_ENABLED to HDT_ENABLED
+                    stGHDTStruct.setHDT_HOST_ENABLED("1");
+                    payConfig.inGetSetHDTConfig(GlobalDefine.SET, String.format("%02d", StGlobalex.inGHDT));
+                    payConfig.inGetHDTConfig(GlobalDefine.SET, String.format("%02d", StGlobalex.inGHDT));
+
+                } else {
+                    break;
+
+                }
+            }
+            GetSigCapCOMIndex();
+
+
+        }
+
+        if (StGlobalex.inGHDT > StGlobalex.MAX_HDT) {
+            AppController.getApp().runOnUiThread(() -> ToastUtils.showToastMessage("DRMS REGISTRATION SUCCESSFUL"));
+
+        } else {
+            try {
+                synchronized (StGlobalex.monitoronCompleted) {
+                    new EmvProcess().DisplayErrorMessage();
+                    StGlobalex.monitoronCompleted.wait();
+                }
+            } catch (InterruptedException e) {
+                LogUtils.i(TAG, e.getMessage());
+            }
+        }
+        return GlobalDefine.OK;
+
+
+    }
+
+    private void SetSigCapConfigIndex(int inIndex) {
+        inGSigCapTableIndex = inIndex;
+    }
+
+    private int GetSigCapConfigIndex() {
+        return inGSigCapTableIndex;
+    }
+
+    int IsSigCapEnabled() {
+        if (AppUtils.isEmpty(StGlobalex.hdtFile) || (!AppUtils.isEmpty(StGlobalex.hdtFile) && AppUtils.isEmptyVal(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX())))
+            return GlobalDefine.ERROR;
+
+        StGlobalex.sigFile = new SIG_FILE();
+        payConfig.inGetSIGConfig(GlobalDefine.GET, String.format("%02d", Integer.parseInt(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX())));
+
+        //2019013003:Venkat: Signature Capture registration is happening even signature record enable flag is Disabled
+        if (StGlobalex.sigFile.getSIGCAP_T_ENABLE() == null || StGlobalex.sigFile.getSIGCAP_T_ENABLE().isEmpty() ||
+                StGlobalex.sigFile.getSIGCAP_T_ENABLE().getBytes()[0] != '1')
+            return GlobalDefine.ERROR;
+
+        return GlobalDefine.OK;
+    }
+
+    private int GetSigCapCOMIndex() {
+
+        return Integer.parseInt(StGlobalex.sigFile.getSIGCAP_T_COM_INDEX());
+
+    }
+
+    private void vdGeneratePaysysField_56(int TransType, int GZImageSize, String chReceiptLayout) {
+        //DATE xDate;
+        String chDataID;
+        String chReceiptID = "";
+        String chEncryptionID;
+        String serialNum;
+        String chDE56Str;
+
+        String chAsciiStr;
+        String chBCDStr;
+        String xDate;
+        if (AppUtils.isEmpty(transTimeStamp)) {
+            Date today = new Date();
+            SimpleDateFormat format = new SimpleDateFormat("yyMMddHHmmss");
+            xDate = format.format(today);
+        } else
+            xDate = transTimeStamp;
+
+        //Date including Year
+        //read_date (&xDate); // only for Year
+        chDataID = "";//,0,sizeof(chDataID));
+        serialNum = "";//,0,sizeof(serialNum));
+        chDataID = xDate;
+        serialNum = payServicesCommon.getSerialNumber();
+
+        int insernum = serialNum.length();
+        if (insernum > 8)
+            chDataID = chDataID + serialNum.substring(insernum - 8, insernum);
+        else
+            chDataID = chDataID + serialNum;
+        chDataID = chDataID + "02";
+        chDataID = chDataID + String.format("%02X%02X", GZImageSize / 256, GZImageSize % 256);//image size
+
+        chReceiptID = chReceiptID + StGlobalex.sigFile.getSIGCAP_T_RECEIPT_LOGO_VERSION();
+        chReceiptID = chReceiptID + StGlobalex.sigFile.getSIGCAP_T_HOST_ID();
+
+        chReceiptID = chReceiptID + vdPSGetTransType(TransType);
+        chReceiptID = chReceiptID + chReceiptLayout;
+
+        chEncryptionID = PAYSYS_SIGCAP_ENCRYPTION_DISABLE;//PAYSYS_SIGCAP_ENCRYPTION_TYPE_1;
+
+        StGlobalex.field_56 = chDataID + chReceiptID + chEncryptionID;
+
+
+    }
+
+    /* AddSigCapTLVData
+     * dest - destination array
+     * tag - tag ie "0001"
+     * len - length of value
+     * value - data array
+     */
+    private String AddSigCapTLVData(String dest, String tag, int len, String value) {
+        int inTotalLength = 0;
+        String chAsciiStr;
+        String chBCDStr;
+
+        if (value.equals("") || value == null)
+            return null;
+
+        // skip padding tlv data if the length is zero
+        if (len == 0)
+            return null;
+
+        //inTotalLength = (dest[0] >> 4) * 1000 + (dest[0] & 0x0F) * 100 + ((dest[1]) >> 4) * 10 + ((dest[1]) & 0x0F);
+        //inTotalLength +=2;
+
+        // pad tag
+        dest = dest + tag;
+        String hexString = String.format("%04d", len);
+        byte[] bylen = ByteUtils.hexString2ByteArray(hexString);
+        dest += (char) bylen[0];
+        dest += (char) bylen[1];
+        //dest=dest+String.format("%02d",len);
+        //dest+= len/256;
+        //dest+= len%256;
+        dest = dest + value;
+        return dest;
+
+
+    }
+
+    /* vdPSGetTransType
+     * [in] inTrans - Transaction type
+     * [out] TransTypeID - Transaction type ID
+     */
+    private String vdPSGetTransType(int inTrans) {
+        String TransTypeID = "";
+        switch (inTrans) {
+            case TransactionConfig.PURCHASE:
+                // 2015121800 Teck: NFP/EZL/DRMS - Categorize NFP/EZL trans type of DRMS as Purchase (0001). DRMS host will not store the transaction if the trans type is not valid.
+            case TransactionConfig.EZLINK_SALE:
+            case TransactionConfig.NETS_FLASHPAY_SALE:
+            case TransactionConfig.CPQR_SALE:
+            case TransactionConfig.MPQR_SALE:
+
+                TransTypeID = SC_T_TRANS_TYPE_PURCHASE;
+                break;
+            case TransactionConfig.REVERSAL:
+                TransTypeID = SC_T_TRANS_TYPE_REVERSAL;
+                break;
+            case TransactionConfig.OFFLINE:
+                TransTypeID = SC_T_TRANS_TYPE_OFFLINE;
+                break;
+            case TransactionConfig.END_SETTLEMENT:
+                TransTypeID = SC_T_TRANS_TYPE_INIT_SETTLE;
+                break;
+            case TransactionConfig.BATCHXFER:
+                TransTypeID = SC_T_TRANS_TYPE_BATCHXFER;
+                break;
+            case TransactionConfig.VOID:
+            case TransactionConfig.CPQR_VOID:
+            case TransactionConfig.MPQR_VOID:
+
+                TransTypeID = SC_T_TRANS_TYPE_VOID;
+                break;
+            case TransactionConfig.VOID_ADJUST:
+                TransTypeID = SC_T_TRANS_TYPE_VOID_ADJUST;
+                break;
+            case TransactionConfig.LOGON:
+                TransTypeID = SC_T_TRANS_TYPE_LOGON;
+                break;
+            case TransactionConfig.AUTH:
+                TransTypeID = SC_T_TRANS_TYPE_AUTH;
+                break;
+            case TransactionConfig.REFUND:
+            case TransactionConfig.CPQR_REFUND:
+            case TransactionConfig.MPQR_REFUND:
+                TransTypeID = SC_T_TRANS_TYPE_REFUND;
+                break;
+            case TransactionConfig.ADJUST:
+                TransTypeID = SC_T_TRANS_TYPE_ADJUST;
+                break;
+            case TransactionConfig.SALECOMP:
+                TransTypeID = SC_T_TRANS_TYPE_SALECOMP;
+                break;
+            case TransactionConfig.BALANCE:
+                TransTypeID = SC_T_TRANS_TYPE_BALANCE;
+                break;
+            case TransactionConfig.EMV_SALE:
+                TransTypeID = SC_T_TRANS_TYPE_EMV_SALE;
+                break;
+            case TransactionConfig.EMV_OFFLINE:
+                TransTypeID = SC_T_TRANS_TYPE_EMV_OFFLINE;
+                break;
+            case TransactionConfig.EMV_OFFLINETC:
+                TransTypeID = SC_T_TRANS_TYPE_EMV_OFFLINETC;
+                break;
+            case TransactionConfig.PIGGYBACK:
+                TransTypeID = SC_T_TRANS_TYPE_PIGGYBACK;
+                break;
+            default:
+                TransTypeID = "0000";
+                break;
+
+        }
+        return TransTypeID;
+    }
+
+
+    private int inSCUploadTrans(SignatureTrans signatureTrans, boolean isBackground, SIG_DATA_FILE sigDataFile) {
+        int inRespCodeL = 0;
+        int inAssembleRet = 0;
+        int i = 0;
+        int inStartMaskAfter = 0, inStopMaskBefore = 4;
+        String chDE56Str;
+        String chMaskFormat;
+        String chStringData;
+        String chPaymentTermInfo;
+        String chDisclaimer;
+        String chPaymentConditions;
+        String chSigcapHardwareType;
+
+
+        String chIPPInstallmentPeriod;
+        String chIPPMonthlyPaymentAmount;
+        String chIPPMonthlyPaymentLabel;
+        String chIPPOriginalAmount;
+        String chIPPFinalAmount;
+        StGlobalex.chGTipAmount = "";
+
+        String chAsciiStr;
+        String chBCDStr;
+
+        chStringData = "";//,0,sizeof(chStringData));
+        chMaskFormat = "";//,0,sizeof(chMaskFormat));
+        chPaymentTermInfo = "";//,0,sizeof(chPaymentTermInfo));
+        chSigcapHardwareType = "";//,0,sizeof(chSigcapHardwareType));
+        transTimeStamp = "";
+
+        if (AppUtils.isEmpty(transTimeStamp)) {
+            transTimeStamp = signatureTrans.getTRECORD_TIME_STAMP();
+        }
+        // upload of transaction data
+        if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_SIGCAP_TRANS_UPLOAD_REQ()) &&
+                signatureTrans.getTRECORD_T_SIGCAP_TRANS_UPLOAD_REQ().length() > 0) {
+
+            // lets upload the transaction data
+            StGlobalex.inGTransaction = TransactionConfig.PAYSYS_SC_SIG_TRANS;
+
+            // 2017081108 Teck: DRMS - Critical fix where terminal is uploading RRN for offline transaction to DRMS. The RRN value that is upload is came from the previous online transaction.
+            //vdCleanFields();
+
+            chMaskFormat = signatureTrans.getTRECORD_T_MASK_FORMAT();
+            if (!AppUtils.isEmpty(chMaskFormat) && (chMaskFormat.length()) == 2) {
+                inStartMaskAfter = chMaskFormat.getBytes()[0] - 0x30;
+                inStopMaskBefore = chMaskFormat.getBytes()[1] - 0x30;
+            }
+
+            if (signatureTrans.getTRECORD_T_HOST_TYPE().equals(GlobalDefine.ALIPAY_HOST)) {
+                StGlobalex.chGCardAccountNumber = signatureTrans.getTRECORD_T_BCODE_BUYER_CODE();
+            } else {
+                StGlobalex.chGCardAccountNumber = signatureTrans.getTRECORD_T_ACCOUNT_NUMBER();
+                StGlobalex.chGCardAccountNumber = payTaskCom.AreaExtract(1, '=', signatureTrans.getTRECORD_T_ACCOUNT_NUMBER(), StGlobalex.chGCardAccountNumber, signatureTrans.getTRECORD_T_ACCOUNT_NUMBER().length());
+                // hardcode mask card number first 6 last 4
+                String byValue = StGlobalex.chGCardAccountNumber.substring(0, inStartMaskAfter);
+                for (i = inStartMaskAfter; i < StGlobalex.chGCardAccountNumber.length() - inStopMaskBefore; i++)
+                    //byValue[i] = '?';
+                    byValue = byValue + "?";
+                byValue = byValue + StGlobalex.chGCardAccountNumber.substring(StGlobalex.chGCardAccountNumber.length() - inStopMaskBefore);
+                StGlobalex.chGCardAccountNumber = byValue;
+            }
+            chPaymentTermInfo = signatureTrans.getTRECORD_T_PAYMENT_TERM_INFO();//, inGetTreeTagDataSize(ttUploadData, TRECORD_T_PAYMENT_TERM_INFO));
+            chPaymentConditions = signatureTrans.getTRECORD_T_PAYMENT_TERM_INFO();//+PAYMENT_TERM_CONDITION_POSITION, PAYMENT_CONDITION_SIZE);
+
+            // set correct field_03
+            if ((!AppUtils.isEmpty(signatureTrans.getTRECORD_T_VOIDED()) && signatureTrans.getTRECORD_T_VOIDED().equals("1")) ||
+                    (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_ADJUSTED()) && signatureTrans.getTRECORD_T_ADJUSTED().equals("1")))
+                StGlobalex.chGProcessingCode = GlobalDefine.DEF_PS_SIG_UPDATE;
+            else {
+                if (signatureTrans.getTRECORD_T_SIGNATURE_REQ() == null || signatureTrans.getTRECORD_T_SIGNATURE_REQ().isEmpty() ||
+                        signatureTrans.getTRECORD_T_SIGNATURE_REQ().equals("0"))
+                    StGlobalex.chGProcessingCode = GlobalDefine.DEF_PS_SIG_NOT_REQ; // Signature is not required (may be due to PIN, Cless CVM limit or NSR)
+                else if (signatureTrans.getTRECORD_T_SIGNATURE_REQ().equals("1")) {
+                    // signature is required
+
+                    if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA()))
+                        StGlobalex.chGProcessingCode = GlobalDefine.DEF_PS_SIG_TRANS;// Signature data available
+                    else {
+                        // No signature image data avaialble
+                        if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_SIGCAP_HARDWARE_TYPE()) &&
+                                signatureTrans.getTRECORD_T_SIGCAP_HARDWARE_TYPE().length() > 0) {
+                            chSigcapHardwareType = signatureTrans.getTRECORD_T_SIGCAP_HARDWARE_TYPE();
+
+
+                            if (!AppUtils.isEmpty(chSigcapHardwareType != null))
+                                StGlobalex.chGProcessingCode = GlobalDefine.DEF_PS_SIG_ERROR; // Signature data is not available
+                            else
+                                StGlobalex.chGProcessingCode = GlobalDefine.DEF_PS_SIG_REFUSED; // Signature data is not available
+                        } else
+                            StGlobalex.chGProcessingCode = GlobalDefine.DEF_PS_SIG_REFUSED; // Signature data is not available
+                    }
+                }
+            }
+            //20191109:00001:004: Send invoice no: to Drms host.
+            StGlobalex.field_11 = signatureTrans.getTRECORD_T_INVOICE();
+            StGlobalex.field_12 = signatureTrans.getTRECORD_T_TIME();
+            StGlobalex.field_13 = signatureTrans.getTRECORD_T_DATE();
+            StGlobalex.field_04 = signatureTrans.getTRECORD_T_AMOUNT();
+            StGlobalex.field_37 = signatureTrans.getTRECORD_T_RRN();
+            StGlobalex.field_38 = signatureTrans.getTRECORD_T_APPROVAL_CODE();
+            //20181108:6113:001:DRMS:Signature Capture
+            StGlobalex.TERMINAL_ID = signatureTrans.getTRECORD_T_TID();
+            StGlobalex.MERCHANT_ID = signatureTrans.getTRECORD_T_MID();
+
+            if (!(StGlobalex.hdtFile.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.ALIPAY_HOST.getBytes()[0]))//QRPAY
+            {
+                if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_TIP_AMOUNT()) &&
+                        signatureTrans.getTRECORD_T_TIP_AMOUNT().length() > 0 && Long.parseLong(signatureTrans.getTRECORD_T_TIP_AMOUNT()) > 0)
+                    StGlobalex.chGTipAmount = signatureTrans.getTRECORD_T_TIP_AMOUNT();
+            }
+
+            // 20191109:00001:006: if Trans id VOid Adjust, amount value taken from Original Amount
+            if ((!AppUtils.isEmpty(signatureTrans.getTRECORD_T_VOIDED()) && signatureTrans.getTRECORD_T_VOIDED().equals("1")) &&
+                    (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_ADJUSTED()) && signatureTrans.getTRECORD_T_ADJUSTED().equals("1"))) {
+                StGlobalex.field_04 = signatureTrans.getTRECORD_T_ORIGINAL_AMOUNT();
+            }
+
+
+            StGlobalex.chGPosEntryMode = vdSetSCEntryModeValue(Integer.parseInt(signatureTrans.getTRECORD_T_TRANS_MODE()));
+
+            StGlobalex.field_56 = signatureTrans.getTRECORD_T_SIGCAP_DATA_ID();
+            StGlobalex.field_56 = StGlobalex.field_56 + signatureTrans.getTRECORD_T_SIGCAP_RECEIPT_ID();
+            StGlobalex.field_56 = StGlobalex.field_56 + signatureTrans.getTRECORD_T_SIGCAP_ENCRYPTION_ID();
+
+
+            // build field_61
+            StGlobalex.field_61 = "";
+            StGlobalex.field_63 = signatureTrans.getTRECORD_T_PAYMENT_TERM_INFO();
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_HOST_LABEL()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_HOST_LABEL, signatureTrans.getTRECORD_T_HOST_LABEL().length(), signatureTrans.getTRECORD_T_HOST_LABEL());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_INVOICE()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_INVOICE_NUMBER, signatureTrans.getTRECORD_T_INVOICE().length(), signatureTrans.getTRECORD_T_INVOICE());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_BATCH_NUMBER()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_BATCH_NUMBER, signatureTrans.getTRECORD_T_BATCH_NUMBER().length(), signatureTrans.getTRECORD_T_BATCH_NUMBER());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_ADDITIONAL_DATA()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_ADD_DATA, signatureTrans.getTRECORD_T_ADDITIONAL_DATA().length(), signatureTrans.getTRECORD_T_ADDITIONAL_DATA());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_CARD_LABEL()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_CARD_LABEL, signatureTrans.getTRECORD_T_CARD_LABEL().length(), signatureTrans.getTRECORD_T_CARD_LABEL());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_APPLICATION_LABEL()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_EMV_APP_LABEL, signatureTrans.getTRECORD_T_APPLICATION_LABEL().length(), signatureTrans.getTRECORD_T_APPLICATION_LABEL());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_TRANS_CURRENCY_LABEL()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_HOST_CURRENCY, signatureTrans.getTRECORD_T_TRANS_CURRENCY_LABEL().length(), signatureTrans.getTRECORD_T_TRANS_CURRENCY_LABEL());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_TRANS_TYPE_PRINT_STRING()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_TRANS_TYPE_STR, signatureTrans.getTRECORD_T_TRANS_TYPE_PRINT_STRING().length(), signatureTrans.getTRECORD_T_TRANS_TYPE_PRINT_STRING());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_ENTRY_MODE_PRINT_STRING()) && !signatureTrans.getTRECORD_T_ENTRY_MODE_PRINT_STRING().equalsIgnoreCase("UNKNOWN"))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_ENTRY_MODE, signatureTrans.getTRECORD_T_ENTRY_MODE_PRINT_STRING().length(), signatureTrans.getTRECORD_T_ENTRY_MODE_PRINT_STRING());
+
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_TVR()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_TVR, signatureTrans.getTRECORD_T_TVR().length(), signatureTrans.getTRECORD_T_TVR());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_TSI()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_TSI, signatureTrans.getTRECORD_T_TSI().length(), signatureTrans.getTRECORD_T_TSI());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_AID()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_AID, signatureTrans.getTRECORD_T_AID().length(), signatureTrans.getTRECORD_T_AID());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_TRANS_CRYPTO()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_TC, signatureTrans.getTRECORD_T_TRANS_CRYPTO().length(), signatureTrans.getTRECORD_T_TRANS_CRYPTO());
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_ATC()))
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_ATC, signatureTrans.getTRECORD_T_ATC().length(), signatureTrans.getTRECORD_T_ATC());
+
+            if (signatureTrans.getTRECORD_T_RWS_UTRN() != null && !signatureTrans.getTRECORD_T_RWS_UTRN().isEmpty())
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_RWS_UTRN, signatureTrans.getTRECORD_T_RWS_UTRN().length(), signatureTrans.getTRECORD_T_RWS_UTRN());
+
+            if (!AppUtils.isEmpty(StGlobalex.field_63)) {
+
+
+                if (field_63.contains("û2")) {
+                    field_63 = field_63.replace("û2", "-------------------------------");
+                }
+
+                if (field_63.contains("\u0003")) {
+                    field_63 = field_63.replace("\u0003", "\n");
+                }
+
+            } else
+                field_63 = "";
+
+            if (StGlobalex.hdtFile.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.EZLINK_PAYMENT_HOST.getBytes()[0]) {
+                if (!TextUtils.isEmpty(signatureTrans.getTRECORD_EZLINK_VERSION())) {
+                    if (signatureTrans.getTRECORD_EZLINK_VERSION().equals(GlobalDefine.EZLINK_3)) {
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_ADD_DATA, signatureTrans.getTRECORD_T_PAYMENT_TERM_INFO().length(), signatureTrans.getTRECORD_T_PAYMENT_TERM_INFO());
+                    } else {
+                        if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_CHIP_DATA()))
+                            StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_ADD_DATA, signatureTrans.getTRECORD_T_CHIP_DATA().length(), signatureTrans.getTRECORD_T_CHIP_DATA());
+                    }
+                }
+            } else {
+                if (signatureTrans.getTRECORD_T_HOST_TYPE().equalsIgnoreCase(GlobalDefine.ALIPAY_HOST)) {
+                       String data = signatureTrans.getTRECORD_T_RRN() + "             " +
+                                "WALLET NAME : "+signatureTrans.getTRECORD_T_CARD_LABEL() + "        " +
+                                signatureTrans.getTRECORD_T_ADDITIONAL_DATA();
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_ADD_DATA, data.length(), data);
+                }
+
+            }
+            if (signatureTrans.getTRECORD_T_HOST_TYPE().equalsIgnoreCase(GlobalDefine.INSTALMENT_HOST))
+            //if( ((char*)pGetTreeTagData(ttUploadData,TRECORD_T_HOST_TYPE))[0] == INSTALMENT_HOST )
+            {
+                if (!AppUtils.isEmptyVal(signatureTrans.getTRECORD_T_OCBC_IPP_TERM())) {
+                    chIPPMonthlyPaymentLabel = String.format("%02d MONTHLY PAYM", (Integer.parseInt(signatureTrans.getTRECORD_T_OCBC_IPP_TERM()) - 1));
+
+                    if (!AppUtils.isEmpty(chIPPMonthlyPaymentLabel))
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_PAYM_LABEL, chIPPMonthlyPaymentLabel.length(), chIPPMonthlyPaymentLabel);
+                    else
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_PAYM_LABEL, 02, "00");
+                }
+
+
+                if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_OCBC_IPP_TERM())) {
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_PERIOD, signatureTrans.getTRECORD_T_OCBC_IPP_TERM().length(), signatureTrans.getTRECORD_T_OCBC_IPP_TERM());
+                } else
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_PERIOD, 12, "000000000000");
+
+                if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_AMOUNT())) {
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_ORIGINAL_AMOUNT, signatureTrans.getTRECORD_T_AMOUNT().length(), signatureTrans.getTRECORD_T_AMOUNT());
+                } else
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_ORIGINAL_AMOUNT, 12, "000000000000");
+
+                if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_OCBC_IPP_FRIST_PAYMENT())) {
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_MONTHLY_AMOUNT, signatureTrans.getTRECORD_T_OCBC_IPP_FRIST_PAYMENT().length(), signatureTrans.getTRECORD_T_OCBC_IPP_FRIST_PAYMENT());
+                } else
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_MONTHLY_AMOUNT, 12, "000000000000");
+
+                if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_OCBC_IPP_SUBSEQUENT_PAYMENT())) {
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_FINAL_AMOUNT, signatureTrans.getTRECORD_T_OCBC_IPP_SUBSEQUENT_PAYMENT().length(), signatureTrans.getTRECORD_T_OCBC_IPP_SUBSEQUENT_PAYMENT());
+                } else
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_FINAL_AMOUNT, 12, "000000000000");
+            }
+
+
+            // 2016080800 Teck: EPP/DRMS - AMEX EPP is now supported on DRMS. Receipt format will be similar to DBS IPP.
+            if (signatureTrans.getTRECORD_T_HOST_TYPE().getBytes()[0] == GlobalDefine.AMEX_HOST) {
+                if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_AMEX_EPP_TERM()) &&
+                        signatureTrans.getTRECORD_T_AMEX_EPP_TERM().length() > 0) {
+                    chIPPInstallmentPeriod = signatureTrans.getTRECORD_T_AMEX_EPP_TERM();
+                    if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_AMOUNT()) &&
+                            !AppUtils.isEmpty(signatureTrans.getTRECORD_T_AMEX_EPP_TERM()))
+                        chIPPMonthlyPaymentAmount = String.format("%012d", Long.parseLong(signatureTrans.getTRECORD_T_AMOUNT()) / Long.parseLong(signatureTrans.getTRECORD_T_AMEX_EPP_TERM()));
+                    else
+                        chIPPMonthlyPaymentAmount = "0";
+                    if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_AMOUNT()))
+                        chIPPOriginalAmount = String.format("%012d", Long.parseLong(signatureTrans.getTRECORD_T_AMOUNT()));
+                    else
+                        chIPPOriginalAmount = "0";
+                    chIPPFinalAmount = String.format("%012d", (Long.parseLong(chIPPOriginalAmount) - (Long.parseLong(chIPPMonthlyPaymentAmount) * (Integer.parseInt(chIPPInstallmentPeriod) - 1))));
+                    chIPPMonthlyPaymentLabel = String.format("%02d MONTHLY PAYM", (Integer.parseInt(chIPPInstallmentPeriod) - 1));
+
+                    if (!AppUtils.isEmpty(chIPPInstallmentPeriod))
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_PERIOD, chIPPInstallmentPeriod.length(), chIPPInstallmentPeriod);
+                    else
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_PERIOD, 02, "00");
+
+                    if (!AppUtils.isEmpty(chIPPMonthlyPaymentLabel))
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_PAYM_LABEL, chIPPMonthlyPaymentLabel.length(), chIPPMonthlyPaymentLabel);
+                    else
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_PAYM_LABEL, 12, "000000000000");
+
+                    if (!AppUtils.isEmpty(chIPPMonthlyPaymentAmount))
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_MONTHLY_AMOUNT, chIPPMonthlyPaymentAmount.length(), chIPPMonthlyPaymentAmount);
+                    else
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_MONTHLY_AMOUNT, 12, "000000000000");
+
+                    if (!AppUtils.isEmpty(chIPPFinalAmount))
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_FINAL_AMOUNT, chIPPFinalAmount.length(), chIPPFinalAmount);
+                    else
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_FINAL_AMOUNT, 12, "000000000000");
+
+                    if (!AppUtils.isEmpty(chIPPOriginalAmount))
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_ORIGINAL_AMOUNT, chIPPOriginalAmount.length(), chIPPOriginalAmount);
+                    else
+                        StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_IPP_ORIGINAL_AMOUNT, 12, "000000000000");
+
+
+                }
+            } else if (!AppUtils.isEmpty(signatureTrans.getTLMS_DATA()) && (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_VOIDED()) && signatureTrans.getTRECORD_T_VOIDED().equals("0"))) {
+                LMSModel model = LmsManager.getInstance().onGetLmsObject(signatureTrans.getTLMS_DATA());
+                if (!AppUtils.isEmpty(model.getLABEL())) {
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_LABEL, model.getLABEL().length(), model.getLABEL());
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_REDEEM_AMOUNT, model.getBR_T_LMS_REDEEM_AMT().length(), model.getBR_T_LMS_REDEEM_AMT());
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_NETT_AMOUNT, signatureTrans.getTRECORD_T_ORIGINAL_AMOUNT().length(), signatureTrans.getTRECORD_T_ORIGINAL_AMOUNT());
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_REBATE, model.getBR_T_LMS_REDEEM_AMT().length(), model.getBR_T_LMS_REDEEM_AMT());
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_ISSUED_AMOUNT, model.getBR_T_LMS_REDEEM_AMT().length(), model.getBR_T_LMS_REDEEM_AMT());
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_NEW_BALANCE, model.getBR_T_LMS_BALANCE().length(), model.getBR_T_LMS_BALANCE());
+                    StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_TRACE, model.getBR_T_LMS_TRACE().length(), model.getBR_T_LMS_TRACE());
+                }
+            }
+
+
+            StringBuilder sbBuilder = new StringBuilder(StGlobalex.field_61);
+            StGlobalex.field_61 = "";
+            StGlobalex.field_61 += sbBuilder;
+            // build field_62
+            StGlobalex.field_62 = "";
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_PERSON_NAME()))
+                StGlobalex.field_62 = AddSigCapTLVData(StGlobalex.field_62, SC_T_RECEIPT_FOOTER_DISCLAIMER_1, signatureTrans.getTRECORD_T_PERSON_NAME().length(), signatureTrans.getTRECORD_T_PERSON_NAME());
+
+            // Disclaimer 2
+
+            // AMEX EPP
+            //20181108:6113:001:DRMS:Signature Capture
+            if (signatureTrans.getTRECORD_T_HOST_TYPE().getBytes()[0] == (GlobalDefine.AMEX_HOST) &&
+                    !AppUtils.isEmpty(signatureTrans.getTRECORD_T_AMEX_EPP_TERM()) &&
+                    signatureTrans.getTRECORD_T_AMEX_EPP_TERM().length() > 0) {
+                // 2016080500 Teck: EPP - Added AMEX EPP disclaimers
+                chDisclaimer = null;
+
+
+            }
+            // 2017071201 Teck: IPP/DRMS - Due to the limitation of NAC preventing us from uploading messages larger than 800 bytes, we will code the disclaimer into DRMS portal receipt template rather than uploading it.
+
+            else if (signatureTrans.getTRECORD_T_HOST_TYPE().equals(GlobalDefine.INSTALMENT_HOST))
+                chDisclaimer = GlobalDefine.DISCLAIMER_IPP_1 + " " + GlobalDefine.DISCLAIMER_IPP_2 + " " + GlobalDefine.DISCLAIMER_IPP_3 + " " + GlobalDefine.DISCLAIMER_IPP_4 + " " + GlobalDefine.DISCLAIMER_IPP_5 + " " + GlobalDefine.DISCLAIMER_IPP_6;
+            else if (signatureTrans.getTRECORD_T_HOST_TYPE().equals((GlobalDefine.PINBASED_CUP_HOST))) {
+                chDisclaimer = null;
+                chDisclaimer = String.format("%s\n%s", GlobalDefine.DISCLAIMER_SINOPAY_1, GlobalDefine.DISCLAIMER_SINOPAY_2);
+            } else {
+                // Main Disclaimer
+                chDisclaimer = GlobalDefine.DISCLAIMER_MAIN_1 + "\n" + GlobalDefine.DISCLAIMER_MAIN_2;
+                //sprintf(chDisclaimer, "%s\n%s", DISCLAIMER_MAIN_1, DISCLAIMER_MAIN_2 );
+            }
+            if (!AppUtils.isEmpty(chDisclaimer))
+                StGlobalex.field_62 = AddSigCapTLVData(StGlobalex.field_62, SC_T_RECEIPT_FOOTER_DISCLAIMER_2, chDisclaimer.length(), chDisclaimer);
+
+
+            if (!AppUtils.isEmpty(StGlobalex.cfgMerchantFile.getMERCHANT_FOOTER1()))
+                StGlobalex.field_62 = AddSigCapTLVData(StGlobalex.field_62, SC_T_RECEIPT_FOOTER_FOOTNOTE_1, StGlobalex.cfgMerchantFile.getMERCHANT_FOOTER1().length(), StGlobalex.cfgMerchantFile.getMERCHANT_FOOTER1());
+            if (!AppUtils.isEmpty(StGlobalex.cfgMerchantFile.getMERCHANT_FOOTER2()))
+                StGlobalex.field_62 = AddSigCapTLVData(StGlobalex.field_62, SC_T_RECEIPT_FOOTER_FOOTNOTE_2, StGlobalex.cfgMerchantFile.getMERCHANT_FOOTER2().length(), StGlobalex.cfgMerchantFile.getMERCHANT_FOOTER2());
+
+            // 2017081101 Teck: RWS - Terminal will now send UTRN, Original UTRN, and Bank TID to DRMS
+
+            inAssembleRet = payTaskCom.vdAssembleSDLCPacket();
+
+            if (inAssembleRet != GlobalDefine.OK)
+                return GlobalDefine.ERROR;
+
+            if (isBackground) {
+                if (DrmsUploadService.getInstance().inSendRecv() != GlobalDefine.OK) {
+                    DrmsUploadService.getInstance().inDisconnection();
+                    return GlobalDefine.ERROR;
+                }
+
+            } else if (payTaskCom.inSendRecv() != GlobalDefine.OK) {
+                payTaskCom.inDisconnection();
+                return GlobalDefine.ERROR;
+            }
+            inAssembleRet = payTaskCom.inProcessPacket(StGlobalex.byResponseData, StGlobalex.inRequestSize);
+
+            //StGlobalex.field_39.equals("03") || commenting this
+            if (StGlobalex.field_39 != null && (StGlobalex.field_39.equals("12")) &&
+                    ((StGlobalex.inGTransaction == TransactionConfig.PAYSYS_SC_BATCH_CLOSE || StGlobalex.inGTransaction == TransactionConfig.PAYSYS_SC_SIG_TRANS ||
+                            StGlobalex.inGTransaction == TransactionConfig.PAYSYS_SC_SIG_UPLOAD || StGlobalex.inGTransaction == TransactionConfig.PAYSYS_SC_TERM_REG_INIT))) {
+                signatureTrans.setTRECORD_T_SIGCAP_TRANS_UPLOAD_REQ("0");
+                AppController.getController().set(Controller.IS_NEED_DRMSREG, true);
+            } else if (inAssembleRet != GlobalDefine.OK)
+                return inAssembleRet;
+
+
+            if (StGlobalex.field_39.equals("00")) {
+                signatureTrans.setTRECORD_T_SIGCAP_TRANS_UPLOAD_REQ("0");
+                Singleton.getPayConfigObj().deleteUploadedSIGFile(sigDataFile);
+            }
+            if (field_39 == null || (field_39 != null && field_39.isEmpty())) {
+                AppController.getApp().runOnUiThread(() -> ToastUtils.showToastMessage("DRMS UPLOAD ERROR"));
+            } else if (!field_39.equals("00")) {
+                AppController.getApp().runOnUiThread(() -> ToastUtils.showToastMessage("ERROR RESPONSE - " + field_39));
+            }
+
+
+        }
+
+        // upload of signature data
+        while (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_SIGCAP_SIGN_UPLOAD_REQ()) &&
+                signatureTrans.getTRECORD_T_SIGCAP_SIGN_UPLOAD_REQ().equals("1")) {
+
+            // Lets upload the signature
+            StGlobalex.inGTransaction = TransactionConfig.PAYSYS_SC_SIG_UPLOAD;
+
+
+            StGlobalex.TERMINAL_ID = signatureTrans.getTRECORD_T_TID();
+            StGlobalex.MERCHANT_ID = signatureTrans.getTRECORD_T_MID();
+            StGlobalex.chGNII = signatureTrans.getTRECORD_T_NII();
+
+            StGlobalex.field_56 = signatureTrans.getTRECORD_T_SIGCAP_DATA_ID();
+            StGlobalex.field_56 = StGlobalex.field_56 + signatureTrans.getTRECORD_T_SIGCAP_RECEIPT_ID();
+            StGlobalex.field_56 = StGlobalex.field_56 + signatureTrans.getTRECORD_T_SIGCAP_ENCRYPTION_ID();
+            String chTempSignature = "";
+            StGlobalex.field_57 = "";
+            chTempSignature += signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA();
+
+
+            String hexString = String.format("%04X", (signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA().length()) / 2);
+            byte[] value = ByteUtils.hexString2ByteArray(hexString);
+            String tmpBuff = "xx";
+            StGlobalex.field_57 += hexString;// = (byte)0x00;// (Integer.parseInt(hexString)/ 256);
+            StGlobalex.field_57 += chTempSignature;
+
+            LogUtils.d(GlobalDefine.TAG, "Sig_ByteSize:" + signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA().length());
+            LogUtils.d(GlobalDefine.TAG, "chTempSignatureSize:" + chTempSignature.length());
+            LogUtils.i("SignATURE", "The length of the electronic signature data is:" + chTempSignature);
+            LogUtils.d(GlobalDefine.TAG, "Sig_Byte:" + signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA());
+            LogUtils.d(GlobalDefine.TAG, "chTempSignature:" + chTempSignature);
+            LogUtils.d(GlobalDefine.TAG, "StGlobalex.field_57Size:" + StGlobalex.field_57.length());
+            LogUtils.d(GlobalDefine.TAG, "StGlobalex.field_57:" + StGlobalex.field_57);
+
+            inAssembleRet = payTaskCom.vdAssembleSDLCPacket();
+
+            if (inAssembleRet != GlobalDefine.OK)
+                return GlobalDefine.ERROR;
+
+            if (isBackground) {
+                if (DrmsUploadService.getInstance().inSendRecv() != GlobalDefine.OK) {
+                    DrmsUploadService.getInstance().inDisconnection();
+                    return GlobalDefine.ERROR;
+                }
+
+            } else if (payTaskCom.inSendRecv() != GlobalDefine.OK) {
+                payTaskCom.inDisconnection();
+                return GlobalDefine.ERROR;
+            }
+            inAssembleRet = payTaskCom.inProcessPacket(StGlobalex.byResponseData, StGlobalex.inRequestSize);
+
+            if (inAssembleRet != GlobalDefine.OK)
+                return inAssembleRet;
+            else {
+                signatureTrans.setTRECORD_T_SIGCAP_SIGN_UPLOAD_REQ("0");
+            }
+
+
+        }
+
+
+        return GlobalDefine.OK;
+
+
+    }
+
+    /**
+     * PREPARE CURRENR TRANSACTION FOR DRMS
+     */
+    private String tPrepareTransactionRecord(TransData transData) {
+
+        int GZippedDataSize = 0;
+        String xDate;
+        String chDataID;
+        String chReceiptID = "";
+        String chEncryptionID;
+        String serialNum;
+        String chByteStr;
+        String chTCString = "";
+        String chAIDString = "";
+        String chTVRString = "";
+        String chTSIString = "";
+        String chAppLabelString = "";
+        String chATC = "";
+        String chATCString = "";
+        String chAdditionalDataFullString;
+        String chTransTypePrintString;
+        String chEntryModePrintString;
+        int inUnencryptedBalance = 0;
+        int inLenToEncrypt = 0;
+        int inLoop = 0;
+        int inCounter = 0;
+        StGlobalex.chGTipAmount = "";
+
+        byte[] chEncryptionKey = new byte[16];
+        byte[] chFullKey = new byte[40];
+        byte[] chKeyPart1 = new byte[8];
+        byte[] chKeyPart2 = new byte[8];
+        byte[] chKeyPart3 = new byte[8];
+        byte[] chKeyPart4 = new byte[8];
+        byte[] chKeyPart5 = new byte[8];
+        String chAmountKey;
+        byte[] chInitialVector = new byte[8];
+        byte[] chBlock2Encrypt = new byte[8];
+        String chSigcapConfigIndex;
+        SignatureTrans signatureTrans = new SignatureTrans();
+
+
+        BATCH_FILE stBatchRecord = Component.getBatchFileFromTransData(transData.getTransFile());
+
+        //Load HDT in case HDT null from batch file
+        if (AppUtils.isEmpty(StGlobalex.hdtFile))
+            Singleton.getPayConfigObj().inGetHDTConfig(GET, String.format("%02d", Integer.parseInt(transData.getTransFile().getHdt_index())));
+
+        if (transData.getEnterMode() == TransData.EnterMode.CLSS ||
+                (Integer.parseInt(stBatchRecord.getTrans_type()) != TransactionConfig.OFFLINE &&
+                        Integer.parseInt(stBatchRecord.getTrans_type()) != TransactionConfig.REFUND)) {
+            if (!AppUtils.isEmpty(stBatchRecord.getTransCryto())) {
+                chTCString = stBatchRecord.getTransCryto();
+            }
+
+            // AID string extract
+            if (!AppUtils.isEmpty(stBatchRecord.getChAid()))
+                chAIDString = stBatchRecord.getChAid();
+
+            //TVR
+            if (!AppUtils.isEmpty(stBatchRecord.getTVRValue()))
+                chTVRString = stBatchRecord.getTVRValue();
+
+            signatureTrans.setTRECORD_TIME_STAMP(CommonUtils.getDrmsTimeStamp());
+
+            //TSI
+            if (!AppUtils.isEmpty(stBatchRecord.getTSIValue()))
+                chTSIString = stBatchRecord.getTSIValue();
+
+
+            // App Label
+            if (!AppUtils.isEmpty(stBatchRecord.getApplication_label()))
+                chAppLabelString = stBatchRecord.getApplication_label();
+
+
+            //#UPI
+            if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals(GlobalDefine.PINBASED_CUP_HOST) &&
+                    !AppUtils.isEmpty(transData.getTransFile().getChipData()) && transData.getTransFile().getChipData().contains("9F36")) {
+                String tempp = transData.getTransFile().getChipData();
+                tempp = TlvUtils.decodingTLV(tempp, "9F36").get(0);
+                if (!AppUtils.isEmpty(tempp))
+                    chATCString = chATCString + String.format("%02X%02X", tempp.getBytes()[0], tempp.getBytes()[1]);
+            }
+        }
+
+        if (IsSigCapEnabled() != GlobalDefine.OK) {
+            chSigcapConfigIndex = String.format("%d", GetSigCapConfigIndex());
+            signatureTrans.setTRECORD_T_SIGCAP_CONFIG_INDEX(chSigcapConfigIndex);
+        }
+
+        //#RWS
+        if (!AppUtils.isEmpty(transData.getTransFile().getUtrn_code()) && transData.getTransFile().getUtrn_code().length() >= 20)
+            signatureTrans.setTRECORD_T_RWS_UTRN(transData.getTransFile().getUtrn_code().substring(transData.getTransFile().getUtrn_code().length() - 20));
+
+        signatureTrans.setTRECORD_T_RWS_ORIGINAL_UTRN(transData.getTransFile().getUtrn_code());
+
+        signatureTrans.setTRECORD_T_TID(StGlobalex.hdtFile.getHDT_TERMINAL_ID());
+        signatureTrans.setTRECORD_T_MID(StGlobalex.hdtFile.getHDT_MERCHANT_ID());
+        signatureTrans.setTRECORD_T_BATCH_NUMBER(String.format("%06d", Integer.parseInt(transData.getTransFile().getBATCH_ID())));
+        signatureTrans.setTRECORD_T_HOST_TYPE(StGlobalex.hdtFile.getHDT_HOST_TYPE());
+        signatureTrans.setTRECORD_T_HOST_LABEL(StGlobalex.hdtFile.getHDT_HOST_LABEL());
+
+
+        if (!AppUtils.isEmpty(transData.getTransFile().getWalletName()))
+            signatureTrans.setTRECORD_T_CARD_LABEL(transData.getTransFile().getWalletName());
+
+
+        signatureTrans.setTRECORD_T_MASK_FORMAT(stBatchRecord.getRFU1());
+        signatureTrans.setTRECORD_T_TRANS_CURRENCY_LABEL(Singleton.getCurrencyObject().getCURR_LABEL());
+
+
+        chByteStr = stBatchRecord.getTrans_type();
+        if (!AppUtils.isEmpty(chByteStr))
+            signatureTrans.setTRECORD_T_TRANS_TYPE(chByteStr);
+
+        chByteStr = stBatchRecord.getTrans_mode();
+        if (!AppUtils.isEmpty(chByteStr))
+            signatureTrans.setTRECORD_T_TRANS_MODE(chByteStr);
+
+
+        chByteStr = stBatchRecord.getVoided();
+        if (!AppUtils.isEmpty(chByteStr))
+            signatureTrans.setTRECORD_T_VOIDED(chByteStr);
+
+
+        chByteStr = stBatchRecord.getUploaded();
+        if (!AppUtils.isEmpty(chByteStr))
+            signatureTrans.setTRECORD_T_UPLOADED(chByteStr);
+
+        if (!AppUtils.isEmpty(stBatchRecord.getBR_T_ADJUSTED()))
+            signatureTrans.setTRECORD_T_ADJUSTED(stBatchRecord.getBR_T_ADJUSTED()); // to tell the sigcap host that there was an amount adjustment.
+
+        if (!AppUtils.isEmpty(stBatchRecord.getProc_code()))
+            signatureTrans.setTRECORD_T_PROC_CODE(stBatchRecord.getProc_code());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getInvoice_number()))
+            signatureTrans.setTRECORD_T_INVOICE(String.format("%06d", Integer.parseInt(stBatchRecord.getInvoice_number())));
+
+
+        if (!AppUtils.isEmpty(stBatchRecord.getAmount()))
+            signatureTrans.setTRECORD_T_AMOUNT(String.format("%012d", Integer.parseInt(stBatchRecord.getAmount())));
+
+        if (!AppUtils.isEmpty(stBatchRecord.getTip_amount()))
+            signatureTrans.setTRECORD_T_TIP_AMOUNT(String.format("%012d", Integer.parseInt(stBatchRecord.getTip_amount())));
+
+
+        if (AppUtils.isEmpty(transData.getTransFile().getDate()))
+            transData.getTransFile().setDate(Device.getTime(TIME_PATTERN_TRANS));
+
+        String tempData = transData.getTransFile().getDate();
+
+        if (!AppUtils.isEmpty(tempData) && tempData.length() >= 8) {
+            String date = tempData.substring(4, 8);
+            String time = tempData.substring(8);
+            LogUtils.d(TAG, "FIELD-12 : " + time);
+            LogUtils.d(TAG, "FIELD-13 : " + date);
+            signatureTrans.setTRECORD_T_TIME(time);
+            signatureTrans.setTRECORD_T_DATE(date);
+        }
+
+
+        if (!AppUtils.isEmpty(transData.getLmsModel()))
+            signatureTrans.setTLMS_DATA(new Gson().toJson(transData.getLmsModel()));
+
+        if (!AppUtils.isEmpty(stBatchRecord.getOrg_mess_id()))
+            signatureTrans.setTRECORD_T_ORG_MESSAGE_ID(stBatchRecord.getOrg_mess_id());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getSys_trace_num()))
+            signatureTrans.setTRECORD_T_SYSTEM_TRACE(String.format("%06d", Integer.parseInt(stBatchRecord.getSys_trace_num())));
+
+        if (!AppUtils.isEmpty(stBatchRecord.getDate_exp()) && !stBatchRecord.getDate_exp().contains("/"))
+            signatureTrans.setTRECORD_T_EXPIRY_DATE(stBatchRecord.getDate_exp());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getRetr_ref_num()))
+            signatureTrans.setTRECORD_T_RRN(stBatchRecord.getRetr_ref_num());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getAuthCode()))
+            signatureTrans.setTRECORD_T_APPROVAL_CODE(stBatchRecord.getAuthCode());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getResp_code()))
+            signatureTrans.setTRECORD_T_RESPONSE_CODE(stBatchRecord.getResp_code());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getAcct_number()))
+            signatureTrans.setTRECORD_T_ACCOUNT_NUMBER(stBatchRecord.getAcct_number());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getBR_BCODE_T_BUYER_CODE()))
+            signatureTrans.setTRECORD_T_BCODE_BUYER_CODE(stBatchRecord.getBR_BCODE_T_BUYER_CODE());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getPerson_name()))
+            signatureTrans.setTRECORD_T_PERSON_NAME(stBatchRecord.getPerson_name());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getOriginal_amount()))
+            signatureTrans.setTRECORD_T_ORIGINAL_AMOUNT(String.format("%012d", Integer.parseInt(stBatchRecord.getOriginal_amount())));
+
+
+        if (!AppUtils.isEmpty(stBatchRecord.getAdditional_data())) {
+            chAdditionalDataFullString = "";
+
+            if (!AppUtils.isEmpty(StGlobalex.cfgUtilityFile.getADDITIONAL_PROMPT()))
+                chAdditionalDataFullString = StGlobalex.cfgUtilityFile.getADDITIONAL_PROMPT() + " ";
+
+
+            if (!AppUtils.isEmpty(stBatchRecord.getAdditional_data()))
+                chAdditionalDataFullString = chAdditionalDataFullString + stBatchRecord.getAdditional_data();
+
+            signatureTrans.setTRECORD_T_ADDITIONAL_DATA(chAdditionalDataFullString);
+        }
+
+        if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals((GlobalDefine.ALIPAY_HOST))) {
+            if (!AppUtils.isEmpty(stBatchRecord.getField63())) ;
+            {
+                String inputString = StringByteUtils.hexToString(stBatchRecord.getField63());
+                inputString = StringByteUtils.hexStr2Str(inputString);
+                if (transData.getEnterMode() == TransData.EnterMode.CPQR) {
+                    String inputStr = QRUtils.onGetCPQRReceipt(StringByteUtils.hexToString(stBatchRecord.getField63()));
+                    signatureTrans.setTRECORD_T_PAYMENT_TERM_INFO(stBatchRecord.getRetr_ref_num());
+                } else
+                    signatureTrans.setTRECORD_T_PAYMENT_TERM_INFO(QRUtils.onGetMPQRReceipt(inputString, stBatchRecord));
+            }
+        } else {
+            if (!AppUtils.isEmpty(stBatchRecord.getPayment_term_info()) && !StGlobalex.hdtFile.getHDT_HOST_TYPE().equals((GlobalDefine.INSTALMENT_HOST)))
+                signatureTrans.setTRECORD_T_PAYMENT_TERM_INFO(stBatchRecord.getPayment_term_info());
+        }
+        if (!AppUtils.isEmpty(stBatchRecord.getPri_acct_num()))
+            signatureTrans.setTRECORD_T_PRI_ACCOUNT_NUM(stBatchRecord.getPri_acct_num());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getPos_ent_mode()))
+            signatureTrans.setTRECORD_T_POS_ENTRY_MODE(stBatchRecord.getPos_ent_mode());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getNII()))
+            signatureTrans.setTRECORD_T_NII(stBatchRecord.getNII());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getPos_cond_code()))
+            signatureTrans.setTRECORD_T_POS_COND_CODE(stBatchRecord.getPos_cond_code());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getAdd_amount()))
+            signatureTrans.setTRECORD_T_ADD_AMOUNT(String.format("%012d", Integer.parseInt(stBatchRecord.getAdd_amount())));
+
+
+        chByteStr = stBatchRecord.getCard_type();
+        if (!AppUtils.isEmpty(chByteStr))
+            signatureTrans.setTRECORD_T_CARD_TYPE(chByteStr);
+
+        if (!AppUtils.isEmpty(stBatchRecord.getCard_sequence()))
+            signatureTrans.setTRECORD_T_CARD_SEQUENCE(stBatchRecord.getCard_sequence());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getChipData()))
+            signatureTrans.setTRECORD_T_CHIP_DATA(stBatchRecord.getChipData());
+
+        signatureTrans.setTRECORD_T_TVR(chTVRString);
+        signatureTrans.setTRECORD_T_TSI(chTSIString);
+        signatureTrans.setTRECORD_T_TRANS_CRYPTO(chTCString);
+        signatureTrans.setTRECORD_T_AID(chAIDString);
+        signatureTrans.setTRECORD_T_ATC(chATCString);
+
+        if (!AppUtils.isEmpty(stBatchRecord.getScriptRslt71()))
+            signatureTrans.setTRECORD_T_SCRIPT71(stBatchRecord.getScriptRslt71());
+
+        if (!AppUtils.isEmpty(stBatchRecord.getScriptRslt72()))
+            signatureTrans.setTRECORD_T_SCRIPT72(stBatchRecord.getScriptRslt72());
+
+        if (!AppUtils.isEmpty(chAppLabelString))
+            signatureTrans.setTRECORD_T_APPLICATION_LABEL(chAppLabelString);
+
+
+        chTransTypePrintString = Singleton.getReceiptPrintObj().vdGetTransTypePrtStr(stBatchRecord);
+        signatureTrans.setTRECORD_T_TRANS_TYPE_PRINT_STRING(chTransTypePrintString);
+        if (!AppUtils.isEmpty(stBatchRecord.getTrans_mode()) && !AppUtils.isEmpty(transData.getTransFile().getCard_type())) {
+            chEntryModePrintString = Singleton.getReceiptPrintObj().vdGetEntryModePrtStr(Integer.parseInt(stBatchRecord.getTrans_mode()), transData.getTransFile().getCard_type().getBytes()[0]);
+            signatureTrans.setTRECORD_T_ENTRY_MODE_PRINT_STRING(chEntryModePrintString);
+        }
+
+        // 2016080800 Teck: EPP/DRMS - AMEX EPP is now supported on DRMS. Receipt format will be similar to DBS IPP.
+        if (Singleton.getServicesObj().IsAmexEppHost() == GlobalDefine.OK && !AppUtils.isEmpty(stBatchRecord.getBR_T_AMEX_EPP_TERM())) {
+            //String ttempString = stGBatchRecord.getBR_T_AMEX_EPP_TERM();//pGetTreeTagData(ttGBatchRecord, BR_T_AMEX_EPP_TERM);
+            signatureTrans.setTRECORD_T_AMEX_EPP_TERM(stBatchRecord.getBR_T_AMEX_EPP_TERM());
+        }
+
+        if (!AppUtils.isEmpty(stBatchRecord.getTrans_type()) && stBatchRecord.getTrans_type().equals(String.valueOf(TransactionConfig.EZLINK_SALE)))
+            signatureTrans.setTRECORD_EZLINK_VERSION(stBatchRecord.getEZLINK_VERSION());
+
+
+        if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals((GlobalDefine.INSTALMENT_HOST))) {
+            // 2017060100 Teck: Added OCBC Instalment
+            if (!AppUtils.isEmpty(StGlobalex.hdtFile.getHDT_PAY_TERM())) {
+                signatureTrans.setTRECORD_T_OCBC_IPP_TERM(StGlobalex.hdtFile.getHDT_PAY_TERM());
+            }
+            if (!AppUtils.isEmpty(transData.getTransFile().getBR_T_IPP_FIRST_PAYMENT())) {
+                signatureTrans.setTRECORD_T_OCBC_IPP_FRIST_PAYMENT(transData.getTransFile().getBR_T_IPP_FIRST_PAYMENT());
+            }
+            if (!AppUtils.isEmpty(transData.getTransFile().getBR_T_IPP_SUBSEQUENT_PAYMENT())) {
+                signatureTrans.setTRECORD_T_OCBC_IPP_SUBSEQUENT_PAYMENT(transData.getTransFile().getBR_T_IPP_SUBSEQUENT_PAYMENT());
+            }
+        }
+
+
+        //#UPI
+        if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals((GlobalDefine.PINBASED_CUP_HOST))) {
+
+            if (!AppUtils.isEmpty(transData.getTransFile().getBR_T_SINOPAY_DE44_ISSUER_NO())) {
+                signatureTrans.setTRECORD_T_ISSUER_NO(transData.getTransFile().getBR_T_SINOPAY_DE44_ISSUER_NO());
+            }
+
+            if (!AppUtils.isEmpty(transData.getTransFile().getBR_T_SINOPAY_DE44_ACQUIRER_NO())) {
+                signatureTrans.setTRECORD_T_ACQUIRER_NO(StGlobalex.batchFile.getBR_T_SINOPAY_DE44_ACQUIRER_NO());
+            }
+
+            if (!AppUtils.isEmpty(StGlobalex.cfgUtilityFile.getENV_T_SINOPAY_OPERATOR_NO())) {
+                signatureTrans.setTRECORD_T_OPERATOR_NO(StGlobalex.cfgUtilityFile.getENV_T_SINOPAY_OPERATOR_NO());
+            }
+
+            if (!AppUtils.isEmpty(transData.getTransFile().getBR_T_SINOPAY_ORIGINAL_SALE_RRN())) {
+                signatureTrans.setTRECORD_T_ORIGINAL_SALE_RRN(transData.getTransFile().getBR_T_SINOPAY_ORIGINAL_SALE_RRN());
+            }
+
+            if (!AppUtils.isEmpty(transData.getTransFile().getField63())) {
+                String chSinopayDE63String = "";
+                chSinopayDE63String = transData.getTransFile().getField63();
+                if (transData.getTransFile().getField63().length() >= 43) {
+                    chSinopayDE63String = transData.getTransFile().getField63().substring(3, 3 + 40);
+                    signatureTrans.setTRECORD_T_SINOPAY_MESSAGE_1(chSinopayDE63String);
+                }
+                int length = transData.getTransFile().getField63().length();
+                if (transData.getTransFile().getField63().length() >= 63) {
+                    chSinopayDE63String = transData.getTransFile().getField63().substring(3 + 20 + 20, 3 + 20 + 20 + 20);
+                    signatureTrans.setTRECORD_T_SINOPAY_MESSAGE_2(chSinopayDE63String);
+                }
+
+            }
+        }
+        if (!AppUtils.isEmpty(stBatchRecord.getSignFree()))
+            signatureTrans.setTRECORD_T_SIGNATURE_REQ("1");
+        else
+            signatureTrans.setTRECORD_T_SIGNATURE_REQ("0");
+
+        if (!AppUtils.isEmpty(stBatchRecord.getBR_T_SIGNATURE_CAPTURE_DEVICE()))
+            signatureTrans.setTRECORD_T_SIGCAP_HARDWARE_TYPE(stBatchRecord.getBR_T_SIGNATURE_CAPTURE_DEVICE());
+
+
+        if (!AppUtils.isEmpty(stBatchRecord.getBR_T_SIGNATURE_GZ_DATA())) {
+            GZippedDataSize = stBatchRecord.getBR_T_SIGNATURE_GZ_DATA().length;
+            signatureTrans.setTRECORD_T_SIGNATURE_REQ("1");
+            String dd = ByteUtils.byteArray2HexString(stBatchRecord.getBR_T_SIGNATURE_GZ_DATA());
+            signatureTrans.setTRECORD_T_SIGCAP_GZ_DATA(StringByteUtils.byte2HexStr(stBatchRecord.getBR_T_SIGNATURE_GZ_DATA())); // store the gz data
+            signatureTrans.setTRECORD_T_SIGCAP_SIGN_UPLOAD_REQ("1");
+            LogUtils.d(GlobalDefine.TAG, "BatchSize:" + stBatchRecord.getBR_T_SIGNATURE_GZ_DATA().length);
+            LogUtils.d(GlobalDefine.TAG, "SignSize:" + signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA().length());
+        } else if (!AppUtils.isEmpty(stBatchRecord.getSignFree()) && stBatchRecord.getSignFree() == false) {
+            signatureTrans.setTRECORD_T_SIGNATURE_REQ("1");
+        } else {
+            signatureTrans.setTRECORD_T_SIGNATURE_REQ("0");
+        }
+
+        chDataID = onGenerateDataID(GZippedDataSize);
+        chReceiptID = chReceiptID + StGlobalex.sigFile.getSIGCAP_T_RECEIPT_LOGO_VERSION();//GetSigCapConfigValue(SIGCAP_T_RECEIPT_LOGO_VERSION);
+        chReceiptID = chReceiptID + StGlobalex.sigFile.getSIGCAP_T_HOST_ID();
+
+        if (!AppUtils.isEmpty(stBatchRecord.getBR_T_ADJUSTED()) &&
+                Integer.parseInt(stBatchRecord.getBR_T_ADJUSTED()) == 1 &&
+                stBatchRecord.getVoided().equals(GlobalDefine.VOID_TRUE)) {
+            chReceiptID = chReceiptID + vdPSGetTransType(TransactionConfig.VOID_ADJUST);
+        } else if (!AppUtils.isEmpty(stBatchRecord.getBR_T_ADJUSTED()) &&
+                Integer.parseInt(stBatchRecord.getBR_T_ADJUSTED()) == 1) {
+            chReceiptID = chReceiptID + vdPSGetTransType(TransactionConfig.ADJUST);
+        } else if (!AppUtils.isEmpty(stBatchRecord.getVoided()) && stBatchRecord.getVoided().equals(GlobalDefine.VOID_TRUE)) {
+            chReceiptID = chReceiptID + vdPSGetTransType(TransactionConfig.VOID);
+        } else
+            chReceiptID = chReceiptID + vdPSGetTransType(Integer.parseInt(stBatchRecord.getTrans_type()));
+
+
+        //20181108:6113:001:DRMS:Signature Capture
+        if (StGlobalex.hdtFile.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.AMEX_HOST &&
+                Singleton.getPayServicesObj().IsAmexEppHost() == GlobalDefine.OK)
+            chReceiptID = chReceiptID + SIGCAP_V_RECEIPT_LAYOUT_AMEX_EPP; // 20190201 Venkat: DRMS - Terminal will use a new DRMS receipt layout ID for AMEX EPP due to the
+        else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals(GlobalDefine.INSTALMENT_HOST))
+            chReceiptID = chReceiptID + SIGCAP_V_RECEIPT_LAYOUT_IPP; // 2017071202 Teck: DRMS - Terminal will use a new DRMS receipt layout ID for OCBC IPP due to the
+        else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals((GlobalDefine.PINBASED_CUP_HOST)))
+            chReceiptID = chReceiptID + SIGCAP_V_RECEIPT_LAYOUT_IPP;
+        else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.DBS_BANK &&
+                LmsManager.getInstance().isLMSHost())
+            chReceiptID = chReceiptID + SIGCAP_V_RECEIPT_LAYOUT_LMS;
+        else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals(GlobalDefine.ALIPAY_HOST))
+            chReceiptID = chReceiptID + SIGCAP_V_RECEIPT_LAYOUT_QR;
+        else
+            chReceiptID = chReceiptID + SIGCAP_V_RECEIPT_LAYOUT_NORMAL;
+
+        // Enable/Disable encryption of signature image here
+        chEncryptionID = PAYSYS_SIGCAP_ENCRYPTION_DISABLE;//PAYSYS_SIGCAP_ENCRYPTION_TYPE_1;
+
+        signatureTrans.setTRECORD_T_SIGCAP_DATA_ID(chDataID);
+        signatureTrans.setTRECORD_T_SIGCAP_RECEIPT_ID(chReceiptID);
+        signatureTrans.setTRECORD_T_SIGCAP_ENCRYPTION_ID(chEncryptionID);
+
+        signatureTrans.setTRECORD_T_SIGCAP_TRANS_UPLOAD_REQ("1");
+        if (!AppUtils.isEmpty(stBatchRecord.getDate_exp()) && !stBatchRecord.getDate_exp().contains("/"))
+            StGlobalex.chGCardExpiryDate = stBatchRecord.getDate_exp();
+
+
+        // Encrypt signature data
+        if (chEncryptionID.equals(PAYSYS_SIGCAP_ENCRYPTION_TYPE_1)) {
+            // encryption is enabled
+            if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA())) {
+
+                // generate encryption key
+                // amount 6 bytes
+                // Teck: amount should be just original amount (exclude tips)
+                chAmountKey = String.format("%012d", Long.parseLong(stBatchRecord.getAmount()) - Long.parseLong(stBatchRecord.getTip_amount()));
+                System.arraycopy(ByteUtils.hexString2ByteArray(chAmountKey), 0, chFullKey, 0, 6);
+                String stTemp = stBatchRecord.getInvoice_number();
+                stTemp = String.format("%06d", Integer.parseInt(stTemp));
+                System.arraycopy(ByteUtils.hexString2ByteArray(stTemp), 0, chFullKey, 6, 3);
+                stTemp = stBatchRecord.getRetr_ref_num();
+                if (!AppUtils.isEmpty(stTemp)) {
+                    while (stTemp.length() < 12) {
+                        stTemp = "0" + stTemp;
+                    }
+                }
+
+                System.arraycopy(StringByteUtils.asciiStr2Bytes(stTemp), 0, chFullKey, 9, 12);
+                System.arraycopy(StringByteUtils.StrToBCDBytes(chDataID), 0, chFullKey, 21, 11);
+                System.arraycopy(StGlobalex.hdtFile.getHDT_TERMINAL_ID().getBytes(), 0, chFullKey, 32, 8);
+
+                System.arraycopy(chFullKey, 0, chKeyPart1, 0, 8);
+                System.arraycopy(chFullKey, 8, chKeyPart2, 0, 8);
+                System.arraycopy(chFullKey, 16, chKeyPart3, 0, 8);
+                System.arraycopy(chFullKey, 24, chKeyPart4, 0, 8);
+                System.arraycopy(chFullKey, 32, chKeyPart5, 0, 8);
+
+                System.arraycopy(chKeyPart1, 0, chEncryptionKey, 0, 8);
+                System.arraycopy(chKeyPart2, 0, chEncryptionKey, 8, 8);
+                System.arraycopy(chKeyPart3, 0, chInitialVector, 0, 8);
+
+                chInitialVector = Singleton.getServicesObj().vdXorBlock(chInitialVector, chKeyPart4);
+                chInitialVector = Singleton.getServicesObj().vdXorBlock(chInitialVector, chKeyPart5);
+
+                inUnencryptedBalance = signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA().length() % 8;
+                inLenToEncrypt = signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA().length() - inUnencryptedBalance;
+                inLoop = signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA().length() / 8;
+
+                byte[] chEncryptedSignatureData = new byte[inLenToEncrypt + inUnencryptedBalance];
+
+
+                byte[] bySignatureData = StringByteUtils.hexStr2Bytes(signatureTrans.getTRECORD_T_SIGCAP_GZ_DATA());
+
+                System.arraycopy(chKeyPart1, 0, StGlobalex.SessionKey, 0, 8);
+                System.arraycopy(chKeyPart2, 0, StGlobalex.SessionKey, 8, 8);
+                TripleDes tripleDes = new TripleDes(StGlobalex.SessionKey);
+                try {
+                    for (inCounter = 0; inCounter < inLoop; inCounter++) {
+
+                        System.arraycopy(bySignatureData, inCounter * 8, chBlock2Encrypt, 0, 8);
+                        chBlock2Encrypt = Singleton.getServicesObj().vdXorBlock(chBlock2Encrypt, chInitialVector);
+
+                        chBlock2Encrypt = tripleDes.encrypt(chBlock2Encrypt);
+
+                        System.arraycopy(chBlock2Encrypt, 0, chEncryptedSignatureData, inCounter * 8, 8);
+                        System.arraycopy(chEncryptedSignatureData, inCounter * 8, chInitialVector, 0, 8);
+                    }
+                } catch (Exception ignored) {
+
+                }
+
+                System.arraycopy(bySignatureData, inLenToEncrypt, chEncryptedSignatureData, inLenToEncrypt, inUnencryptedBalance);
+                String dd = ByteUtils.byteArray2HexString(chEncryptedSignatureData);
+                // store the encrypted gz data.
+                signatureTrans.setTRECORD_T_SIGCAP_GZ_DATA(StringByteUtils.byte2HexStr(chEncryptedSignatureData));
+
+
+            }
+        }
+
+        Gson gson = new Gson();
+        String StringSignatureData = gson.toJson(signatureTrans);
+        return StringSignatureData;
+
+    }
+
+    public static String onGenerateDataID(int GZippedDataSize) {
+        String xDate, chDataID, serialNum;
+        //Date including Year
+        Date today = new Date();
+        SimpleDateFormat format = new SimpleDateFormat("yyMMddHHmmss");
+        xDate = format.format(today);
+        chDataID = xDate;
+
+        serialNum = Singleton.getPayServicesCommonObj().getSerialNumber();
+        int insernum = serialNum.length();
+        if (insernum > 8)
+            chDataID = chDataID + serialNum.substring(insernum - 8, insernum);
+        else
+            chDataID = chDataID + serialNum;
+        chDataID = chDataID + "02";
+        chDataID = chDataID + String.format("%02X%02X", GZippedDataSize / 256, GZippedDataSize % 256); //image size
+
+        return chDataID;
+    }
+
+    public int SigCapUpload() {
+        // 19/08/19 Gopi Checking Networking before Doing Sign
+
+        if (StGlobalex.hdtFile == null || (StGlobalex.hdtFile != null && StGlobalex.hdtFile.getHDT_SIGCAP_INDEX() == null))
+            Singleton.getPayConfigObj().inGetHDTConfig(GlobalDefine.GET, StGlobalex.sigDataFile.getSIG_DATA_ID());
+
+        StGlobalex.inGTransaction = TransactionConfig.PAYSYS_SC_SIG_TRANS;
+        if (StGlobalex.hdtFile != null && StGlobalex.hdtFile.getHDT_SIGCAP_INDEX() != null && StGlobalex.hdtFile.getHDT_SIGCAP_INDEX().equals("1")) {
+            payConfig.inGetSIGConfig(GlobalDefine.GET, String.format("%02d", Integer.parseInt(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX())));
+            if (StGlobalex.sigFile != null && StGlobalex.sigFile.getSIGCAP_T_ENABLE() != null && !StGlobalex.sigFile.getSIGCAP_T_ENABLE().isEmpty() && StGlobalex.sigFile.getSIGCAP_T_ENABLE().equals("1")) {
+                field_39 = "";
+                List<SIG_DATA_FILE> sigDataFileList = payConfig.getSigDataList();//Signatures are stored then only upload it
+                if (sigDataFileList != null && sigDataFileList.size() > 0) {
+
+                    if (!BaseUtils.isNetworkAvailable(StGlobalex.context)) {
+                        synchronized (StGlobalex.monitorErrorThread) {
+                            try {
+                                AlertUtils.showTransactionFailuerAlert(StGlobalex.context, "DRMS UPLOAD ERROR \n NO NETWORK!", ECRConfig.ECR_39_CONNECTION_ERROR);
+                                StGlobalex.monitorErrorThread.wait();
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+                            return GlobalDefine.OK;
+                        }
+                    }
+                    AlertUtils.showProcessingDialog("Processing DRMS");
+                    if (payTaskCom.SignatureTcpConnectivity() == GlobalDefine.SIGCAP_UPLOAD_KO) {
+                        Log.d(TAG, "SIG  SigCapUpload");
+                        // 16/08/2019 Gopi Dismis  All progress Dialogs
+                        AlertUtils.dismissAllProgressDialogs();
+                        if (field_39 == null || (field_39 != null && field_39.isEmpty())) {
+                            AlertUtils.showAlertWithOneOption(StGlobalex.context, Constants.ALERT_TITLE, "DRMS UPLOAD ERROR", "OK");
+                        } else if (field_39 != null && !field_39.equals("03") || !field_39.equals("12")) {
+                            AppController.getController().set(Controller.IS_NEED_DRMSREG, true);
+                            return GlobalDefine.OK;
+                        } else if (!field_39.equals("00")) {
+                            new PayTaskCom().inDisplayResponseCode();//promting
+                            ApplicationEventReceiver.ecrResponse.setResponse_code(field_39);
+
+                            try {
+                                synchronized (StGlobalex.monitoronCompleted) {
+                                    new EmvProcess().DisplayErrorMessage();
+                                    StGlobalex.monitoronCompleted.wait();
+                                }
+                            } catch (InterruptedException e) {
+                                LogUtils.i(TAG, e.getMessage());
+                            }
+
+                        }
+
+                    } else {
+                        AppController.getApp().runOnUiThread(() -> ToastUtils.showToastMessage("SIG. UPLOAD SUCCESSFUL"));
+                    }
+                }
+            }
+        }
+
+        return GlobalDefine.OK;
+    }
+
+
+    public int asySigCapUpload(boolean isBackground) {
+        // Online.closeConnection();
+        List<Map<String, String>> ttPreviousUploadData;
+        List<Map<String, String>> ttUploadList;
+        int iComRet = 0;
+        //int inUploadStatus = 0;
+        int inPreviousComIndex = 0;
+        int inRetries = 0;
+        int inThreadStatus = 0;
+        //char chUploadingDisplay[64];
+        SignatureTrans signatureTrans = new SignatureTrans();
+        SignatureTotals signatureTotals = new SignatureTotals();
+        transTimeStamp = "";
+        StGlobalex.inGTransaction = TransactionConfig.PAYSYS_SC_SIG_TRANS;
+
+        inThreadStatus = 0;
+        nGUploadStatus = SIGCAP_UPLOAD_KO;
+
+        List<SIG_DATA_FILE> sigDataFileList = payConfig.getSigDataList();
+        if (sigDataFileList != null && sigDataFileList.size() > 0) {
+
+            for (int i = 0; i < sigDataFileList.size(); i++) {
+                // disable demo mode for the time being
+                StGlobalex.hdtFile = new HDT_FILE();
+                SIG_DATA_FILE sigDataFile1 = sigDataFileList.get(i);
+                Singleton.getPayConfigObj().inGetHDTConfig(GlobalDefine.GET, sigDataFile1.getSIG_DATA_ID());
+
+
+                if (sigDataFile1.getSIGN_TRANSTYPE().equals((Integer.toString(SC_T_TOTALS_ROOT)))) {
+                    Gson gson = new Gson();
+                    signatureTotals = gson.fromJson(sigDataFile1.getSIGN_DATA(), SignatureTotals.class);
+                    SetSigCapConfigIndex(Integer.parseInt(DEFAULT_SIGCAP_CONFIG_INDEX)); // use default sigcap config index 1
+                } else if (sigDataFile1.getSIGN_TRANSTYPE().equals((Integer.toString(SC_T_TRANSACTION_ROOT))))//if (TlvTree_GetTag(ttGUploadData) == SC_T_TRANSACTION_ROOT )
+                {
+                    Gson gson = new Gson();
+                    signatureTrans = gson.fromJson(sigDataFile1.getSIGN_DATA(), SignatureTrans.class);
+                    if (!AppUtils.isEmpty(signatureTrans.getTRECORD_T_SIGCAP_CONFIG_INDEX()) &&
+                            signatureTrans.getTRECORD_T_SIGCAP_CONFIG_INDEX().length() > 0)
+                        SetSigCapConfigIndex(Integer.parseInt(signatureTrans.getTRECORD_T_SIGCAP_CONFIG_INDEX())); // config index used while storing sigcap trans
+                    else
+                        SetSigCapConfigIndex(Integer.parseInt(DEFAULT_SIGCAP_CONFIG_INDEX)); // use default sigcap config index 1
+
+                } else
+                    return SIGCAP_UPLOAD_KO;
+
+
+                if (sigDataFile1.getSIGN_TRANSTYPE().equals((Integer.toString(SC_T_TOTALS_ROOT))))
+                    nGUploadStatus = inSCUploadTotal(signatureTotals, sigDataFile1); // ie settlement receipt
+                else if (sigDataFile1.getSIGN_TRANSTYPE().equals((Integer.toString(SC_T_TRANSACTION_ROOT)))) {
+                    nGUploadStatus = inSCUploadTrans(signatureTrans, isBackground, sigDataFile1); // ie transactional receipt
+                    payTaskCom.inDisconnection();
+                    return SIGCAP_UPLOAD_OK;
+                } else
+                    return SIGCAP_UPLOAD_KO;//goto lblKO; // unknown type
+                // check upload status inside thread
+                if (nGUploadStatus != GlobalDefine.OK)
+                    return SIGCAP_UPLOAD_KO;
+            }
+
+            payConfig.SigDataDelete();//Delete(SIGCAP_UPLOAD_LIST_FILE, BATCH_DISK);
+        }
+
+        payTaskCom.inDisconnection();
+
+        return SIGCAP_UPLOAD_OK;
+
+    }
+
+    private int inSCUploadTotal(SignatureTotals signatureTrans, SIG_DATA_FILE sigDataFile1) {
+        int inTotalSaleCount = 0;
+        long lgTotalSaleAmount = 0;
+        int inTotalRefundCount = 0;
+        long lgTotalRefundAmount = 0;
+        int inTotalSignedSaleCount = 0;
+        long lgTotalSignedSaleAmount = 0;
+        int inTotalSignedRefundCount = 0;
+        long lgTotalSignedRefundAmount = 0;
+        int inAssembleRet = 0;
+        int inRespCodeL = 0;
+        String chSettlementBody = "";
+        String chSettlementGrandTotals = "";
+        String chLMSLabel;
+        transTimeStamp = "";
+        // check response
+        StGlobalex.inGTransaction = TransactionConfig.PAYSYS_SC_BATCH_CLOSE;
+
+        if (AppUtils.isEmpty(signatureTrans))
+            return 0;
+
+        // field_41
+        StGlobalex.TERMINAL_ID = signatureTrans.getTREPORT_T_TID();
+        StGlobalex.MERCHANT_ID = signatureTrans.getTREPORT_T_MID();//getTRECORD_T_MID();
+
+        transTimeStamp = signatureTrans.getTREPORT_TIMESTAMP();
+
+        //20181108:6113:001:DRMS:Signature Capture
+        if (StGlobalex.hdtFile.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.AMEX_HOST &&
+                Singleton.getPayServicesObj().IsAmexEppHost() == GlobalDefine.OK)
+            vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_AMEX_EPP);
+        else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals(GlobalDefine.INSTALMENT_HOST))
+            vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_IPP);// 2017071202 Teck: DRMS - Terminal will use a new DRMS receipt layout ID for OCBC IPP due to the
+        else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals((GlobalDefine.PINBASED_CUP_HOST)))
+            vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_IPP);
+        else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.DBS_BANK && LmsManager.getInstance().isLMSHost())
+            vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_LMS);
+        else if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals(GlobalDefine.ALIPAY_HOST))
+            vdGeneratePaysysField_56(TransactionConfig.LOGON, 0, SIGCAP_V_RECEIPT_LAYOUT_QR);
+        else
+            vdGeneratePaysysField_56(TransactionConfig.INIT_SETTLEMENT, 0, SIGCAP_V_RECEIPT_LAYOUT_NORMAL); // all other regular host
+
+        StGlobalex.field_61 = "";
+        if (!AppUtils.isEmpty(signatureTrans.getTREPORT_T_HOST_LABEL()))
+            StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_HOST_LABEL, signatureTrans.getTREPORT_T_HOST_LABEL().length(), signatureTrans.getTREPORT_T_HOST_LABEL());
+        if (!AppUtils.isEmpty(signatureTrans.getTREPORT_T_BATCH()))
+            StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_BATCH_NUMBER, signatureTrans.getTREPORT_T_BATCH().length(), signatureTrans.getTREPORT_T_BATCH());
+        if (!AppUtils.isEmpty(signatureTrans.getTREPORT_T_CURRENCY_LABEL()))
+            StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_HOST_CURRENCY, signatureTrans.getTREPORT_T_CURRENCY_LABEL().length(), signatureTrans.getTREPORT_T_CURRENCY_LABEL());
+        if (!AppUtils.isEmpty(signatureTrans.getTREPORT_T_BATCH_GROUP_NUMBER())) { //M - MANUAL SETTLEMENT, A- AUTO SETTLEMENT
+            String batchGrp = (signatureTrans.getTREPORT_T_BATCH_GROUP_NUMBER() + ((SettlementActivity.isManualSettlement) ? "M" : "A"));
+            StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_BATCH_GROUP, batchGrp.length(), batchGrp);
+        }
+        /* LOOP AND PRINT THE CARD TOTAL DETAILS */
+        CardLabel cardLabel = new CardLabel();
+        if (signatureTrans.getCardLabel().size() > 0)
+            cardLabel = signatureTrans.getCardLabel().get(0);
+        List<CardCtsLabel> cardLabelCtsArrayObj = signatureTrans.getCardCtsLabel();//new ArrayList<>();
+
+        if (cardLabelCtsArrayObj != null && cardLabelCtsArrayObj.size() > 0) {
+            if (StGlobalex.hdtFile.getHDT_HOST_TYPE().equals(GlobalDefine.ALIPAY_HOST)) {
+                int ij = 0;
+                for (ij = 0; ij < cardLabelCtsArrayObj.size(); ij++) {
+                    CardCtsLabel localCardCtsLabelObj = cardLabelCtsArrayObj.get(ij);
+                    if (!AppUtils.isEmpty(localCardCtsLabelObj) && !AppUtils.isEmpty(localCardCtsLabelObj.getTREPORT_T_CLT_CARD_LABEL())) {
+                        chSettlementBody = chSettlementBody + String.format("%-24s", localCardCtsLabelObj.getTREPORT_T_CLT_CARD_LABEL());
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_COUNT()) && !AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "SALES",
+                                    Integer.parseInt(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_COUNT()),
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "SALES", 0, 0);
+                        }
+
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_COUNT()) && !AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "REFUND",
+                                    Integer.parseInt(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_COUNT()),
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "REFUND", 0, 0);
+                        }
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT()) && !AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_VSALE_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "V.SALE",
+                                    Integer.parseInt(localCardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT()),
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_VSALE_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "V.SALE", 0, 0);
+                        }
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_VREFUND_COUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "V.RFND",
+                                    Integer.parseInt(localCardCtsLabelObj.getTREPORT_T_CLT_VREFUND_COUNT()),
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_VREFUND_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "V.RFND", 0, 0);
+                        }
+
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT()) && !AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "TOTAL", 0,
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT()) - Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT()));
+                        } else if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "TOTAL", 0,
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT()));
+                        } else if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d-%011d", "TOTAL", 0,
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "TOTAL", 0, 0);
+                        }
+                    }
+                }
+            } else {
+                int ij = 0;
+                for (ij = 0; ij < cardLabelCtsArrayObj.size(); ij++) {
+                    CardCtsLabel localCardCtsLabelObj = cardLabelCtsArrayObj.get(ij);
+                    if (!AppUtils.isEmpty(localCardCtsLabelObj) && !AppUtils.isEmpty(localCardCtsLabelObj.getTREPORT_T_CLT_CARD_LABEL())) {
+                        chSettlementBody = chSettlementBody + String.format("%-24s", localCardCtsLabelObj.getTREPORT_T_CLT_CARD_LABEL());
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_COUNT()) && !AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "SALES",
+                                    Integer.parseInt(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_COUNT()),
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "SALES", 0, 0);
+                        }
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_TIP_COUNT()) && !AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_TIP_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "TIPS",
+                                    Integer.parseInt(localCardCtsLabelObj.getTREPORT_T_CLT_TIP_COUNT()),
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_TIP_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "TIPS", 0, 0);
+                        }
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_COUNT()) && !AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "REFUND",
+                                    Integer.parseInt(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_COUNT()),
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "REFUND", 0, 0);
+                        }
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT()) && !AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_VSALE_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "V.SALE",
+                                    Integer.parseInt(localCardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT()),
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_VSALE_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "V.SALE", 0, 0);
+                        }
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_VREFUND_COUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "V.RFND",
+                                    Integer.parseInt(localCardCtsLabelObj.getTREPORT_T_CLT_VREFUND_COUNT()),
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_VREFUND_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "V.RFND", 0, 0);
+                        }
+
+                        if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT()) && !AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "TOTAL", 0,
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT()) - Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT()));
+                        } else if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "TOTAL", 0,
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT()));
+                        } else if (!AppUtils.isEmptyVal(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT())) {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d-%011d", "TOTAL", 0,
+                                    Long.parseLong(localCardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT()));
+                        } else {
+                            chSettlementBody = chSettlementBody + String.format("%-6s%06d%012d", "TOTAL", 0, 0);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!AppUtils.isEmpty(chSettlementBody))
+            StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_SETTLEMENT_DATA, chSettlementBody.length(), chSettlementBody);
+
+        if (!AppUtils.isEmpty(signatureTrans.getTLMS_DATA())) {
+            try {
+                LmsSettleModel model = new Gson().fromJson(signatureTrans.getTLMS_DATA(), LmsSettleModel.class);
+                // Applicable to LMS host only
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_FULL_REDEEM_TOTAL_COUNT, model.getFullRdmCount().length(), model.getFullRdmCount());
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_FULL_REDEEM_TOTAL_AMOUNT, model.getFullRdmValue().length(), model.getFullRdmValue());
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_PARTIAL_REDEEM_TOTAL_COUNT, model.getPartialRdmCount().length(), model.getPartialRdmCount());
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_PARTIAL_REDEEM_TOTAL_AMOUNT, model.getPartialRdmValue().length(), model.getPartialRdmValue());
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_ISSUED_TOTAL_COUNT, model.getIssuedRdmCount().length(), model.getIssuedRdmCount());
+                StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_ISSUED_TOTAL_AMOUNT, model.getIssuedRdmValue().length(), model.getIssuedRdmValue());
+
+                //StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_OFFLINE_TOTAL_COUNT, inGetTreeTagStringSize(ttUploadData,TREPORT_T_LMS_OFFLINE_COUNT), pGetTreeTagData(ttUploadData,TREPORT_T_LMS_OFFLINE_COUNT) );
+                //StGlobalex.field_61 = AddSigCapTLVData(StGlobalex.field_61, SC_T_RECEIPT_BODY_LMS_OFFLINE_TOTAL_AMOUNT, inGetTreeTagStringSize(ttUploadData,TREPORT_T_LMS_OFFLINE_AMOUNT), pGetTreeTagData(ttUploadData,TREPORT_T_LMS_OFFLINE_AMOUNT) );
+            } catch (Exception e) {
+
+            }
+        }
+
+        StGlobalex.field_62 = "";
+        if (!AppUtils.isEmpty(signatureTrans.getTREPORT_T_AMEX_SOC_NUMBER()))
+            StGlobalex.field_62 = AddSigCapTLVData(StGlobalex.field_62, SC_T_RECEIPT_FOOTER_FOOTNOTE_1, signatureTrans.getTREPORT_T_AMEX_SOC_NUMBER().length(), signatureTrans.getTREPORT_T_AMEX_SOC_NUMBER());
+        StGlobalex.field_62 = AddSigCapTLVData(StGlobalex.field_62, SC_T_RECEIPT_FOOTER_FOOTNOTE_2, "BATCH CLOSED".length(), "BATCH CLOSED");
+
+        // since trace will be used we'll increase it.
+        payConfig.vdUpdateSystemTrace();
+
+        if (!AppUtils.isEmpty(cardLabel.getTREPORT_T_GRAND_SALE_COUNT())) {
+            inTotalSaleCount = Integer.parseInt(cardLabel.getTREPORT_T_GRAND_SALE_COUNT());
+        }
+        if (!AppUtils.isEmpty(cardLabel.getTREPORT_T_GRAND_SALE_AMOUNT())) {
+            lgTotalSaleAmount = Long.parseLong(cardLabel.getTREPORT_T_GRAND_SALE_AMOUNT());
+        }
+        if (!AppUtils.isEmpty(cardLabel.getTREPORT_T_GRAND_REFUND_COUNT())) {
+            inTotalRefundCount = Integer.parseInt(cardLabel.getTREPORT_T_GRAND_REFUND_COUNT());
+        }
+        if (!AppUtils.isEmpty(cardLabel.getTREPORT_T_GRAND_REFUND_AMOUNT())) {
+            lgTotalRefundAmount = Long.parseLong(cardLabel.getTREPORT_T_GRAND_REFUND_AMOUNT());
+        }
+        if (!AppUtils.isEmpty(cardLabel.getTREPORT_T_GRAND_SIGNED_SALE_COUNT())) {
+            inTotalSignedSaleCount = Integer.parseInt(cardLabel.getTREPORT_T_GRAND_SIGNED_SALE_COUNT());
+        }
+        if (!AppUtils.isEmpty(cardLabel.getTREPORT_T_GRAND_SIGNED_SALE_AMOUNT())) {
+            lgTotalSignedSaleAmount = Long.parseLong(cardLabel.getTREPORT_T_GRAND_SIGNED_SALE_AMOUNT());
+        }
+        if (!AppUtils.isEmpty(cardLabel.getTREPORT_T_GRAND_SIGNED_REFUND_COUNT())) {
+            inTotalSignedRefundCount = Integer.parseInt(cardLabel.getTREPORT_T_GRAND_SIGNED_REFUND_COUNT());
+        }
+        if (!AppUtils.isEmpty(cardLabel.getTREPORT_T_GRAND_SIGNED_REFUND_AMOUNT())) {
+            lgTotalSignedRefundAmount = Long.parseLong(cardLabel.getTREPORT_T_GRAND_SIGNED_REFUND_AMOUNT());
+        }
+
+        chSettlementGrandTotals = String.format("%03d%012d%03d%012d%03d%012d%03d%012d%03d%012d%03d%012d%03d%012d%03d%012d%03d%012d%03d%012d%03d%012d",
+                inTotalSaleCount, lgTotalSaleAmount,            // Captured Sale
+                inTotalRefundCount, lgTotalRefundAmount,        // Captured Refund
+                0, 0L,                                            // Debit Sale
+                0, 0L,                                            // Debit Refund
+                0, 0L,                                            // Auth Sale
+                0, 0L,                                            // Auth Refund
+                0, 0L,                                            // Cash Adv Sale
+                0, 0L,                                            // Cash Adv Refund
+                inTotalSignedSaleCount, lgTotalSignedSaleAmount,// Signed Sale
+                inTotalSignedRefundCount, lgTotalSignedRefundAmount,// Signed Refund
+                0, 0L                                            // Signed Cash
+        );
+        StGlobalex.field_63 = "";
+        StGlobalex.field_63 = chSettlementGrandTotals;//AddSigCapTLVData(StGlobalex.field_63, SC_T_RECEIPT_BODY_HOST_LABEL, signatureTrans.getTRECORD_T_HOST_LABEL().length(), signatureTrans.getTRECORD_T_HOST_LABEL());
+
+
+        inAssembleRet = payTaskCom.vdAssembleSDLCPacket();
+
+        if (inAssembleRet != GlobalDefine.OK)
+            return GlobalDefine.ERROR;
+
+        if (payTaskCom.inSendRecv() != GlobalDefine.OK) {
+            payTaskCom.inDisconnection();
+            return GlobalDefine.ERROR;
+        }
+
+
+        // DO THE PROCESSING OF THE RESPONSE BUFFER
+        inAssembleRet = payTaskCom.inProcessPacket(StGlobalex.byResponseData, StGlobalex.inRequestSize);
+
+        if (StGlobalex.field_39 != null && (StGlobalex.field_39.equals("12")) &&
+                ((StGlobalex.inGTransaction == TransactionConfig.PAYSYS_SC_BATCH_CLOSE || StGlobalex.inGTransaction == TransactionConfig.PAYSYS_SC_SIG_TRANS ||
+                        StGlobalex.inGTransaction == TransactionConfig.PAYSYS_SC_SIG_UPLOAD || StGlobalex.inGTransaction == TransactionConfig.PAYSYS_SC_TERM_REG_INIT))) {
+            AppController.getController().set(Controller.IS_NEED_DRMSREG, true);
+            return 0;
+        } else if (field_39 != null && field_39.equals("00")) {
+            if (!AppUtils.isEmpty(sigDataFile1))
+                LogUtils.d(TAG, "Sigcap uploaded success and deleting " + new Gson().toJson(sigDataFile1));
+            else
+                LogUtils.d(TAG, "Sigcap data null");
+
+            Singleton.getPayConfigObj().deleteUploadedSIGFile(sigDataFile1);
+        }
+
+        return inAssembleRet;
+
+
+    }
+
+    String vdSetSCEntryModeValue(int inEntry) {
+        String outEntryMode;
+        if (inEntry == TransactionConfig.CLESS_CHIP || inEntry == TransactionConfig.CLESS_MAG)
+            outEntryMode = SC_V_ENTRY_MODE_CLESS;
+        else if (inEntry == TransactionConfig.EMVCHIP)
+            outEntryMode = SC_V_ENTRY_MODE_CHIP;
+        else if (inEntry == TransactionConfig.FALLBACKSWIPE)
+            outEntryMode = SC_V_ENTRY_MODE_FALLBACK;
+        else if (inEntry == TransactionConfig.SWIPED)
+            outEntryMode = SC_V_ENTRY_MODE_SWIPE;
+        else if (inEntry == TransactionConfig.MANUAL)
+            outEntryMode = SC_V_ENTRY_MODE_MANUAL;
+        else if (inEntry == TransactionConfig.SCAN)
+            outEntryMode = SC_V_ENTRY_MODE_QRBARCODE;
+        else
+            outEntryMode = SC_V_ENTRY_MODE_MANUAL;
+        return outEntryMode;
+
+    }
+
+
+    public void vdSigCapStoreTransaction(TransData transData) {
+        String ttTransactionRecord;
+        payConfig.inGetSIGConfig(GlobalDefine.GET, String.format("%02d", Integer.parseInt(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX())));
+
+        // check if sigcap is applicable for this HDT
+        if (IsSigCapEnabled() != GlobalDefine.OK)
+            return;
+
+        StGlobalex.sigDataFile = new SIG_DATA_FILE();
+
+        // prepare total report tree
+        ttTransactionRecord = tPrepareTransactionRecord(transData);
+        StGlobalex.sigDataFile.setSIGN_TRANSTYPE(Integer.toString(SC_T_TRANSACTION_ROOT));
+        StGlobalex.sigDataFile.setSIGN_DATA(ttTransactionRecord);
+        StGlobalex.sigDataFile.setSIG_DATA_ID(StGlobalex.hdtFile.getHDT_HOST_ID());
+        payConfig.inGetSetSIGData(GlobalDefine.SET, String.format("%02d", Integer.parseInt(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX())));
+
+    }
+
+    public void vdSigCapStoreTotalReport() {
+
+        String ttTransactionRecord;
+
+
+        payConfig.inGetSIGConfig(GlobalDefine.GET, String.format("%02d", Integer.parseInt(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX())));
+        //payConfig.inGetSetSIGData(GlobalDefine.GET,String.format("%02d", Integer.parseInt(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX())));
+        // check if sigcap is applicable for this HDT
+        if (IsSigCapEnabled() != GlobalDefine.OK)
+            return;
+
+        StGlobalex.sigDataFile = new SIG_DATA_FILE();
+        // prepare total report tree
+        ttTransactionRecord = tPrepareTotalReportTree();
+
+        StGlobalex.sigDataFile.setSIGN_TRANSTYPE(Integer.toString(SC_T_TOTALS_ROOT));
+        StGlobalex.sigDataFile.setSIGN_DATA(ttTransactionRecord);
+        StGlobalex.sigDataFile.setSIG_DATA_ID(StGlobalex.hdtFile.getHDT_HOST_ID());
+        payConfig.inGetSetSIGData(GlobalDefine.SET, String.format("%02d", Integer.parseInt(StGlobalex.hdtFile.getHDT_SIGCAP_INDEX())));
+
+
+    }
+
+    private String tPrepareTotalReportTree() {
+        String[] chMonthAlpha = {"???", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+        //S_FS_FILE *inHandle = NULL;
+        //DATE xDate;
+        //TLV_TREE_NODE ttCardTotal = NULL;
+        String chPadTipAmount;//[10 + 1];
+        String chPadAmount;//[32 + 1];
+
+        String chMonth;//[2 + 1];
+        String chDay;//[2 + 1];
+        String chYear;//[2 + 1];
+        String chHour;//[2 + 1];
+        String chMinute;//[2 + 1];
+        String chSecond;//[2 + 1];
+        String chTempBuffer = "";//[35 + 1];
+        String chTempCardLabel;//[32+1];
+        String chTempAmount;//[12 + 1];
+        String chPadAuthID;//[8 + 1];
+        String chSigcapConfigIndex;//[3+1];
+        int inLinePrint = 0;
+        int recordIndex = 0;
+        long AlipayTotal = 0;
+        long weChatTotal = 0;
+        String chSignedTotalExclusiveTip = "0";//[12+1];
+        String chDateString;//[32+1];
+        String chPresetAmountIdentifier;//[32+1];
+        //Map<String, String> map = new HashMap<>();
+        SignatureDetails signatureDetails = new SignatureDetails();
+        List<String> LOC_DREPORT_T_LINE_LIST = new ArrayList<>();
+
+        SignatureTotals signatureTotals = new SignatureTotals();
+        List<CardLabel> cardLabelArrayObj = new ArrayList<>();
+        List<CardCtsLabel> cardLabelCtsArrayObj = new ArrayList<>();
+        CardCtsLabel cardCtsLabelObj = new CardCtsLabel();
+        CardLabel cardLabelObj = new CardLabel();
+        ReceiptPrint receiptPrint = Singleton.getReceiptPrintObj();
+        long tempTotalValue = 0;
+        PayServices payServices = Singleton.getPayServicesObj();
+
+        String chPrintString;
+        String cardLabel;
+
+
+        HDT_FILE stGHDTStruct = StGlobalex.hdtFile;
+        CURR_FILE stGCURRStruct = StGlobalex.currFile;
+
+        //TID Validate
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_TERMINAL_ID()))
+            signatureDetails.setDREPORT_T_TID(stGHDTStruct.getHDT_TERMINAL_ID());
+
+        //TID Validate
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_MERCHANT_ID()))
+            signatureDetails.setDREPORT_T_MID(stGHDTStruct.getHDT_MERCHANT_ID());
+
+        //BATCH NO VALIDATE
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_BATCH_NUMBER()))
+            signatureDetails.setDREPORT_T_BATCH(stGHDTStruct.getHDT_BATCH_NUMBER());
+
+        //HOST LABLE VALIDATE
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_HOST_LABEL()))
+            signatureDetails.setDREPORT_T_HOST_LABEL(stGHDTStruct.getHDT_HOST_LABEL());
+
+        // to print terminal's date on detail report.
+        SimpleDateFormat sdf = new SimpleDateFormat("yyMMddhhmmss");
+        String DateTime = sdf.format(new Date());
+        chYear = DateTime.substring(0, 2);
+        chMonth = DateTime.substring(2, 4);
+        chDay = DateTime.substring(4, 6);
+        chHour = DateTime.substring(6, 8);
+        chMinute = DateTime.substring(8, 10);
+        chSecond = DateTime.substring(10, 12);
+
+        //
+        chDateString = String.format("%s%s%s %s:%s", chDay, chMonthAlpha[Integer.parseInt(chMonth)], chYear, chHour, chMinute);
+        signatureDetails.setDREPORT_T_DATE_TIME(chDateString);
+
+        signatureDetails.setTimeStamp(CommonUtils.getDrmsTimeStamp());
+        // INITIALIZE STRUCT FOR SETTLEMENT REPRINT AND SET THE TID, MID AND BATCH NUMBER
+
+        //TID VALIDATE
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_TERMINAL_ID()))
+            signatureTotals.setTREPORT_T_TID(stGHDTStruct.getHDT_TERMINAL_ID());
+
+        signatureTotals.setTREPORT_TIMESTAMP(CommonUtils.getDrmsTimeStamp());
+
+        //MID VALIDATE
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_MERCHANT_ID()))
+            signatureTotals.setTREPORT_T_MID(stGHDTStruct.getHDT_MERCHANT_ID());
+
+        //BATCH NO# VALIDATE
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_BATCH_NUMBER()))
+            signatureTotals.setTREPORT_T_BATCH(stGHDTStruct.getHDT_BATCH_NUMBER());
+
+
+        //BATCH GROUP NO# VALIDATE
+        if (!AppUtils.isEmptyVal(stGHDTStruct.getHDT_BATCH_GROUP_NUMBER()))
+            signatureTotals.setTREPORT_T_BATCH_GROUP_NUMBER(stGHDTStruct.getHDT_BATCH_GROUP_NUMBER());
+
+        //HOST TYPE VALIDATE
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_HOST_TYPE()))
+            signatureTotals.setTREPORT_T_HOST_TYPE(stGHDTStruct.getHDT_HOST_TYPE());
+
+        //HOST LABLE VALIDATE
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_HOST_LABEL()))
+            signatureTotals.setTREPORT_T_HOST_LABEL(stGHDTStruct.getHDT_HOST_LABEL());
+
+        //HOST DESC VALIDATE
+        if (!AppUtils.isEmpty(stGHDTStruct.getHDT_DESCRIPTION()))
+            signatureTotals.setTREPORT_T_HOST_DESCRIPTION(stGHDTStruct.getHDT_DESCRIPTION());
+
+        //CURR LABLE VALIDATE
+        if (!AppUtils.isEmpty(stGCURRStruct.getCURR_LABEL()))
+            signatureTotals.setTREPORT_T_CURRENCY_LABEL(stGCURRStruct.getCURR_LABEL());
+
+        if (StGlobalex.hdtFile.getHDT_HOST_TYPE().getBytes()[0] == GlobalDefine.AMEX_HOST) {
+            // 2015090402 Teck: DRMS,AMEX - Fix issue where DE63, provided by AMEX host, containing unrecognizable characters is uploaded to DRMS host causing DRMS Settlement Slip to fail to appear inside portal.
+            String chAMEXde63 = "";
+            if (!AppUtils.isEmpty(StGlobalex.field_63))
+                chAMEXde63 = StGlobalex.field_63.replace(" ", "");
+            if (!AppUtils.isEmpty(chAMEXde63) && chAMEXde63.length() > 20)
+                signatureTotals.setTREPORT_T_AMEX_SOC_NUMBER(chAMEXde63.substring(0, 20));
+            else if (!AppUtils.isEmpty(chAMEXde63))
+                signatureTotals.setTREPORT_T_AMEX_SOC_NUMBER(chAMEXde63);
+
+        }
+
+
+        // Set the date time to terminal's current date time first.
+        if (!AppUtils.isEmpty(chDateString))
+            signatureTotals.setTREPORT_T_DATE_TIME(chDateString);
+
+        // OPEN THE FILE
+        PayConfig payConfig = Singleton.getPayConfigObj();
+        List<BATCH_FILE> batchModelList = Singleton.getPayConfigObj().getBatchModelOBJList(String.format("%02d", StGlobalex.inGHDT));
+        tempTotalValue = 0;
+        if (!AppUtils.isEmpty(batchModelList) && batchModelList.size() > 0) {
+
+
+            for (int i = 0; i < batchModelList.size(); i++) {
+                BATCH_FILE stGBatchRecord = batchModelList.get(i);
+                StGlobalex.batchFile = stGBatchRecord;
+                cardCtsLabelObj = new CardCtsLabel();
+                if (stGBatchRecord.getWalletName() == null || (!CommonUtils.isCPQR(stGBatchRecord.getWalletName()))) {
+
+                    Singleton.getPayConfigObj().inGetCTTCardTypeConfig((batchModelList.get(i).getCard_type()));
+                }
+                // 2017072602: Avoid PREAUTH and CANCEL PREAUTH transaction from detail and total reports.
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.AUTH ||
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.CANCEL_PREAUTH || !stGBatchRecord.getResp_code().equals("00"))
+                    continue;
+
+                // ************************ DETAIL REPORT STACKING **************************
+                chPrintString = String.format("%06d", Integer.parseInt(stGBatchRecord.getInvoice_number()));
+                chPrintString = chPrintString + " ";
+
+                // CARD NUMBER
+                if (!AppUtils.isEmpty(stGBatchRecord.getAcct_number()))
+                    chTempBuffer = payTaskCom.AreaExtract(1, '=', stGBatchRecord.getAcct_number(), chTempBuffer, stGBatchRecord.getAcct_number().length());
+
+                if (!CommonUtils.isBarCodeTxn(stGBatchRecord.getTrans_type())) {
+
+                    payConfig.inGetCTTCardTypeConfig(stGBatchRecord.getCard_type());
+                    if (receiptPrint.boGetDRMaskPAN(Integer.parseInt(stGBatchRecord.getTrans_type())) == GlobalDefine.OK)
+                        chTempBuffer = receiptPrint.vdMaskPAN(chTempBuffer, StGlobalex.cttFile.getCTT_MASK_FORMAT().getBytes()[0] - 0x30, StGlobalex.cttFile.getCTT_MASK_FORMAT().getBytes()[1] - 0x30);
+                }
+                chPrintString = chPrintString + chTempBuffer;
+                chPrintString = chPrintString + " ";
+
+                // EXPIRY
+                if (!AppUtils.isEmpty(stGBatchRecord.getAcct_number()))
+                    chTempBuffer = payTaskCom.AreaExtract(2, '=', stGBatchRecord.getAcct_number(), chTempBuffer, stGBatchRecord.getAcct_number().length());
+                if (receiptPrint.boGetDRMaskExpiry(Integer.parseInt(stGBatchRecord.getTrans_type())) == GlobalDefine.OK)
+                    chTempBuffer = "XXXX";
+                chPrintString = chPrintString + chTempBuffer.substring(2, 4);
+                chPrintString = chPrintString + "/";
+                chPrintString = chPrintString + chTempBuffer.substring(0, 2);
+                chPrintString = chPrintString + " ";
+
+
+                chPadAuthID = !TextUtils.isEmpty(stGBatchRecord.getAuthCode()) ? stGBatchRecord.getAuthCode() : StGlobalex.cfgUtilityFile.getDEFAULT_APPROVAL_CODE();
+
+                chPrintString = chPrintString + chPadAuthID;
+
+                LOC_DREPORT_T_LINE_LIST.add(chPrintString);
+
+                // DATE TIME
+                chPrintString = "";
+                chTempBuffer = "";
+                chTempBuffer = chTempBuffer + stGBatchRecord.getDate().substring(6, 8);// + 2, 2);
+
+
+                if (stGBatchRecord.getWalletName() == null || (!CommonUtils.isCPQR(stGBatchRecord.getWalletName()))) {
+                    if (!stGBatchRecord.getVoided().equals("1")) {
+                        if (!AppUtils.isEmpty(stGBatchRecord.getTip_amount()) && !stGBatchRecord.getTip_amount().equals("0.00")) {
+                            tempTotalValue += Long.parseLong(stGBatchRecord.getTip_amount());
+                        }
+
+                        tempTotalValue += Long.parseLong(stGBatchRecord.getAmount());
+
+
+                    }
+                } else {
+                    if (stGBatchRecord.getWalletName().contains("ALIPAY")) {
+                        if (!stGBatchRecord.getVoided().equals("1")) {
+                            if (!AppUtils.isEmpty(stGBatchRecord.getTip_amount()) && !stGBatchRecord.getTip_amount().equals("0.00")) {
+                                AlipayTotal += Long.parseLong(stGBatchRecord.getTip_amount());
+                            }
+
+                            AlipayTotal += Long.parseLong(stGBatchRecord.getAmount());
+
+
+                        }
+                    } else {
+                        if (!stGBatchRecord.getVoided().equals("1")) {
+                            if (!AppUtils.isEmpty(stGBatchRecord.getTip_amount()) && !stGBatchRecord.getTip_amount().equals("0.00")) {
+                                weChatTotal += Long.parseLong(stGBatchRecord.getTip_amount());
+                            }
+
+                            weChatTotal += Long.parseLong(stGBatchRecord.getAmount());
+
+
+                        }
+                    }
+
+                }
+                chMonth = stGBatchRecord.getDate().substring(4, 6);
+                chTempBuffer = chTempBuffer + chMonthAlpha[Integer.parseInt(chMonth)];
+                chTempBuffer = chTempBuffer + " ";
+
+                chTempBuffer = chTempBuffer + stGBatchRecord.getDate().substring(8, 10);
+                chTempBuffer = chTempBuffer + ":";
+                chTempBuffer = chTempBuffer + stGBatchRecord.getDate().substring(10, 12);
+                chTempBuffer = chTempBuffer + ":";
+                chTempBuffer = chTempBuffer + stGBatchRecord.getDate().substring(12, 14);
+                chPrintString = chPrintString + chTempBuffer;
+                chPrintString = chPrintString + " ";
+
+                // CARD TYPE
+                chTempCardLabel = "";
+                if (!AppUtils.isEmpty(StGlobalex.cttFile) && !AppUtils.isEmpty(StGlobalex.cttFile.getCTT_CARD_LABEL()))
+                    chTempCardLabel = StGlobalex.cttFile.getCTT_CARD_LABEL();
+                else
+                    chTempCardLabel = null;
+                if (chTempCardLabel == null || (chTempCardLabel != null && chTempCardLabel.equalsIgnoreCase("QR/BARCODE"))) {
+                    chTempCardLabel = stGBatchRecord.getWalletName();
+                }
+                if (!AppUtils.isEmpty(chTempCardLabel) && chTempCardLabel.length() > 6)
+                    chTempCardLabel = chTempCardLabel.substring(0, 6) + "";
+                String tempp = String.format("%-7s", chTempCardLabel);
+                chPrintString = chPrintString + tempp;
+                chPrintString = chPrintString + " ";
+
+
+                //AMOUNT WILL NEVER EXIT 8 CHARACTERS EVENTHOUGH
+                //IN BUFFER.AMOUNT WE CATER MORE SPACE
+
+                chTempAmount = "";
+                if (!AppUtils.isEmptyVal(stGBatchRecord.getTip_amount()))//#1.44 - Tip in Detail report
+                    chTempAmount = String.format("%03d", Long.parseLong(stGBatchRecord.getAmount()) - Long.parseLong(stGBatchRecord.getTip_amount())); //+atol(stGBatchRecord.tip_amount)); teck: tip amount already included inside main amount
+                else
+                    chTempAmount = String.format("%03d", Long.parseLong(stGBatchRecord.getAmount()));
+                if (Integer.parseInt(StGlobalex.currFile.getCURR_EXPONENT()) > 0)
+                    chTempAmount = receiptPrint.AddChar(chTempAmount, Integer.parseInt(StGlobalex.currFile.getCURR_EXPONENT()), '.');
+
+                // TRANS TYPE
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.PURCHASE ||
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.EMV_SALE) {
+                    chPrintString = (chPrintString + (stGBatchRecord.getVoided().equals(VOID_TRUE) ? "VOID " : "SALE "));
+                }
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.CASH_ADV)
+                    chPrintString = (chPrintString + (stGBatchRecord.getVoided().equals(VOID_TRUE) ? "VCADV " : "CADV "));
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.OFFLINE || Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.EMV_OFFLINE)
+                    chPrintString = (chPrintString + (stGBatchRecord.getVoided().equals(VOID_TRUE) ? "VOFFL " : "OFFL "));
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.REFUND)
+                    chPrintString = (chPrintString + (stGBatchRecord.getVoided().equals(VOID_TRUE) ? "VRFND " : "RFND "));
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.AUTH)
+                    chPrintString = (chPrintString + (stGBatchRecord.getVoided().equals(VOID_TRUE) ? "VPAUT " : "PAUTH "));
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.CANCEL_PREAUTH)
+                    chPrintString = (chPrintString + (stGBatchRecord.getVoided().equals(VOID_TRUE) ? "VCPAUTH " : "CPAUTH "));
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.TOPUP)
+                    chPrintString = (chPrintString + (stGBatchRecord.getVoided().equals(VOID_TRUE) ? "VTOPUP " : "TOPUP "));
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.REDEEM)
+                    chPrintString = (chPrintString + (stGBatchRecord.getVoided().equals(VOID_TRUE) ? "VREDEEM " : "REDEEM "));
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.ADJUST)
+                    chPrintString = (chPrintString + "ADJ ");
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.SALECOMP)
+                    chPrintString = (chPrintString + "SCOM ");
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.VOID_ADJUST)
+                    chPrintString = (chPrintString + "VADJ ");
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.VOID_SALECOMP)
+                    chPrintString = (chPrintString + "VSCOM ");
+
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.CPQR_SALE)
+                    chPrintString = (chPrintString + "SALE ");
+
+                if ((Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.CPQR_VOID))
+                    chPrintString = (chPrintString + "VOID ");
+
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.CPQR_REFUND)
+                    chPrintString = (chPrintString + "REFUND ");
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.VOID)
+                    chPrintString = (chPrintString + "VOID SALE ");
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.VOID_SALECOMP)
+                    chPrintString = (chPrintString + "VOID SALE ");
+
+                if (Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.VOID_SALECOMP)
+                    chPrintString = (chPrintString + "VOID SALE ");
+
+
+                // Format the amount base on length of current stGBatchRecord
+                payServices.fmtPad(chTempAmount, -(11), ' ');
+
+                if (chPrintString.length() > 0) {
+                    while ((chPrintString.length() + chTempAmount.length()) < PRINT_MAX_CHAR_PER_LINE_SMALL)
+                        chPrintString += " ";
+                }
+
+
+                chPrintString = (chPrintString + chTempAmount);
+
+                LOC_DREPORT_T_LINE_LIST.add(chPrintString);
+
+
+                if (!AppUtils.isEmpty(stGBatchRecord.getTip_amount()) &&
+                        stGBatchRecord.getTip_amount().length() > 0) {
+                    chPrintString = "";//, 0, sizeof(chPrintString));
+                    chPadTipAmount = "";//, 0, sizeof(chPadTipAmount));
+                    chPadTipAmount = String.format("%d", Long.parseLong(stGBatchRecord.getTip_amount()));
+                    if (!AppUtils.isEmpty(chPadTipAmount) && chPadTipAmount.length() <= 2)
+                        payServices.fmtPad(chPadTipAmount, -(3), '0');
+                    if (Integer.parseInt(StGlobalex.currFile.getCURR_EXPONENT()) > 0)
+                        chPadTipAmount = receiptPrint.AddChar(chPadTipAmount, Integer.parseInt(StGlobalex.currFile.getCURR_EXPONENT()), '.');
+
+                    payServices.fmtPad(chPadTipAmount, -(10), ' ');
+                    chPrintString = (chPrintString + "                       TIP");
+                    if (chPrintString.length() > 0) {
+                        while ((chPrintString.length() + chPadTipAmount.length()) < PRINT_MAX_CHAR_PER_LINE_SMALL)
+                            chPrintString += " ";
+                    }
+
+                    chPrintString = (chPrintString + chPadTipAmount);
+                    chPrintString = (chPrintString + " ");
+                    if (!chPadTipAmount.equals("0.00")) {
+                        LOC_DREPORT_T_LINE_LIST.add(chPrintString);
+                        LOC_DREPORT_T_LINE_LIST.add("\n");
+
+                    } else
+                        LOC_DREPORT_T_LINE_LIST.add(chPrintString);
+
+
+                }
+
+
+                if (!AppUtils.isEmpty(stGBatchRecord.getAdditional_data()) &&
+                        stGBatchRecord.getAdditional_data().length() > 0) {
+                    // 2014102901 Teck: additional user data to be printed inside detail report if available
+                    chPrintString = "";//", 0, sizeof(chPrintString));
+                    chPrintString = StGlobalex.cfgUtilityFile.getADDITIONAL_PROMPT();
+                    chPrintString = (chPrintString + " ");
+                    chPrintString = (chPrintString + stGBatchRecord.getAdditional_data());
+                    LOC_DREPORT_T_LINE_LIST.add(chPrintString);
+                }
+
+                // blank line
+                LOC_DREPORT_T_LINE_LIST.add("");
+                inLinePrint++;
+
+
+                // ************************ TOTAL REPORT STACKING **************************
+                if ((Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.EMV_SALE ||
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.CASH_ADV ||
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.PURCHASE ||
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.ADJUST || Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.VOID_ADJUST || //added by yogesh to include it in nomal sales
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.EMV_OFFLINE || Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.OFFLINE ||
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.SALECOMP || Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.VOID_SALECOMP ||
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.EZLINK_SALE ||
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.EZLINK_CREDIT ||
+                        Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.NETS_FLASHPAY_SALE) ||
+                        CommonUtils.isCPQR(stGBatchRecord.getWalletName()) ||
+                        CommonUtils.isMPQRTxn(stGBatchRecord.getTrans_type()))//VENKAT ADDED
+                {
+
+                    cardCtsLabelObj.setTREPORT_T_CLT_CARD_LABEL(stGBatchRecord.getWalletName());
+
+                    int kl = 0;
+                    for (kl = 0; kl < cardLabelCtsArrayObj.size(); kl++) {//cardLabelCtsArrayObj=MASTERCARD
+                        CardCtsLabel localCardCtsLabel = cardLabelCtsArrayObj.get(kl);
+                        if (!AppUtils.isEmpty(localCardCtsLabel)) {
+                            if (localCardCtsLabel.getTREPORT_T_CLT_CARD_LABEL().equals(cardCtsLabelObj.getTREPORT_T_CLT_CARD_LABEL())) {
+                                cardCtsLabelObj = localCardCtsLabel;
+                                break;
+                            }
+                        }
+                    }
+
+                    //Count
+                    if (!AppUtils.isEmpty(stGBatchRecord.getVoided()) && stGBatchRecord.getVoided().equals(VOID_TRUE)) {
+                        int inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_VSALE_COUNT("0");
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_VSALE_COUNT(String.valueOf(inCount + 1));
+                    } else {
+                        int inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_SALE_COUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_SALE_COUNT("0");
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_SALE_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_SALE_COUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_SALE_COUNT(String.valueOf(inCount + 1));
+                    }
+                    //Amount
+                    if (!AppUtils.isEmpty(stGBatchRecord.getVoided()) && stGBatchRecord.getVoided().equals(VOID_TRUE)) {
+                        long inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_VSALE_AMOUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_VSALE_AMOUNT("0");
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_VSALE_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_VSALE_AMOUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_VSALE_AMOUNT(Long.toString(inCount + Long.parseLong(stGBatchRecord.getAmount())));
+                    } else {
+                        long inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_SALE_AMOUNT("0");
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_SALE_AMOUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_SALE_AMOUNT(Long.toString(inCount + Long.parseLong(stGBatchRecord.getAmount())));
+                    }
+
+                    //Count
+                    if (!AppUtils.isEmpty(stGBatchRecord.getVoided()) && stGBatchRecord.getVoided().equals(VOID_TRUE)) {
+                        int inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_VSALE_COUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_VSALE_COUNT("0");
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_VSALE_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_VSALE_COUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_VSALE_COUNT(String.valueOf(inCount + 1));
+                    } else {
+                        int inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_SALE_COUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_SALE_COUNT("0");
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_SALE_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_SALE_COUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_SALE_COUNT(String.valueOf(inCount + 1));
+                    }
+                    //Amount
+                    if (!AppUtils.isEmpty(stGBatchRecord.getVoided()) && stGBatchRecord.getVoided().equals(VOID_TRUE)) {
+                        long inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_VSALE_AMOUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_VSALE_AMOUNT("0");
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_VSALE_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_VSALE_AMOUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_VSALE_AMOUNT(String.valueOf(inCount + Long.parseLong(stGBatchRecord.getAmount())));
+                    } else {
+                        long inCount = 0;//cardLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_SALE_AMOUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_SALE_AMOUNT("0");
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_SALE_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_SALE_AMOUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_SALE_AMOUNT(String.valueOf(inCount + Long.parseLong(stGBatchRecord.getAmount())));
+                    }
+
+                    if (!AppUtils.isEmpty(StGlobalex.batchFile.getBR_T_ORIGINAL_TRANS_SIGNED()) &&
+                            StGlobalex.batchFile.getBR_T_ORIGINAL_TRANS_SIGNED().equals("1")) {
+                        long inCount = 0;
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_SIGNED_SALE_COUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_SIGNED_SALE_COUNT("0");
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_SIGNED_SALE_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_SIGNED_SALE_COUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_SIGNED_SALE_COUNT(String.valueOf(inCount + 1));
+
+                        if (!AppUtils.isEmpty(stGBatchRecord.getTip_amount())) {
+                            chSignedTotalExclusiveTip = String.format("%012d", Long.parseLong(stGBatchRecord.getAmount()) -
+                                    Long.parseLong(stGBatchRecord.getTip_amount()));
+                        } else {
+                            chSignedTotalExclusiveTip = String.format("%012d", Long.parseLong(stGBatchRecord.getAmount()));
+                        }
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_SIGNED_SALE_AMOUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_SIGNED_SALE_AMOUNT("0");
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_SIGNED_SALE_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_SIGNED_SALE_AMOUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_SIGNED_SALE_AMOUNT(String.valueOf(inCount + Long.parseLong(chSignedTotalExclusiveTip)));
+
+                    }
+
+                    if ((!AppUtils.isEmpty(stGBatchRecord.getTip_amount()) && stGBatchRecord.getTip_amount().length() > 0 &&
+                            (Long.parseLong(stGBatchRecord.getTip_amount()) > 0)) &&
+                            stGBatchRecord.getVoided().equals(GlobalDefine.VOID_FALSE)) {
+
+                        long inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_TIP_COUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_TIP_COUNT("0");
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_TIP_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_TIP_COUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_TIP_COUNT(String.valueOf(inCount + 1));
+
+                        inCount = 0;//cardLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_TIP_AMOUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_TIP_AMOUNT("0");
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_TIP_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_TIP_AMOUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_TIP_AMOUNT(String.valueOf(inCount + Long.parseLong(stGBatchRecord.getTip_amount())));
+
+                        inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_TIP_COUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_TIP_COUNT("0");
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_TIP_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_TIP_COUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_TIP_COUNT(String.valueOf(inCount + 1));
+
+                        inCount = 0;//cardLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_TIP_AMOUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_TIP_AMOUNT("0");
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_TIP_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_TIP_AMOUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_TIP_AMOUNT(String.valueOf(inCount + Long.parseLong(stGBatchRecord.getTip_amount())));
+
+
+                    }
+
+
+                } else if (!AppUtils.isEmpty(stGBatchRecord.getTrans_type()) && Integer.parseInt(stGBatchRecord.getTrans_type()) == TransactionConfig.REFUND) {
+
+                    cardCtsLabelObj.setTREPORT_T_CLT_CARD_LABEL(StGlobalex.cttFile.getCTT_CARD_LABEL());
+
+                    int kl = 0;
+                    for (kl = 0; kl < cardLabelCtsArrayObj.size(); kl++) {//cardLabelCtsArrayObj=MASTERCARD
+                        CardCtsLabel localCardCtsLabel = cardLabelCtsArrayObj.get(kl);
+                        if (!AppUtils.isEmpty(localCardCtsLabel) && !AppUtils.isEmpty(localCardCtsLabel.getTREPORT_T_CLT_CARD_LABEL())) {
+                            if (localCardCtsLabel.getTREPORT_T_CLT_CARD_LABEL().equals(cardCtsLabelObj.getTREPORT_T_CLT_CARD_LABEL())) {
+                                cardCtsLabelObj = localCardCtsLabel;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!AppUtils.isEmpty(StGlobalex.batchFile.getBR_T_ORIGINAL_TRANS_SIGNED()) &&
+                            StGlobalex.batchFile.getBR_T_ORIGINAL_TRANS_SIGNED().equals("1")) {
+                        long inCount = 0;
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_SIGNED_REFUND_COUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_SIGNED_REFUND_COUNT("0");
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_SIGNED_REFUND_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_SIGNED_REFUND_COUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_SIGNED_REFUND_COUNT(String.valueOf(inCount + 1));
+
+
+                        chSignedTotalExclusiveTip = String.format("%012d", Long.parseLong(stGBatchRecord.getAmount()));
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_SIGNED_REFUND_AMOUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_SIGNED_REFUND_AMOUNT("0");
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_SIGNED_REFUND_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_SIGNED_REFUND_AMOUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_SIGNED_REFUND_AMOUNT(String.valueOf(inCount + Long.parseLong(chSignedTotalExclusiveTip)));
+
+                    }
+                    cardCtsLabelObj.setTREPORT_T_CLT_CARD_LABEL(StGlobalex.cttFile.getCTT_CARD_LABEL());
+                    //Count
+                    if (!AppUtils.isEmpty(stGBatchRecord.getVoided()) && stGBatchRecord.getVoided().equals(VOID_TRUE)) {
+                        int inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_VREFUND_COUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_VREFUND_COUNT("0");
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_VREFUND_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_VREFUND_COUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_VREFUND_COUNT(String.valueOf(inCount + 1));
+                    } else {
+                        int inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_REFUND_COUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_REFUND_COUNT("0");
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_REFUND_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardCtsLabelObj.getTREPORT_T_CLT_REFUND_COUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_REFUND_COUNT(String.valueOf(inCount + 1));
+                    }
+                    //Amount
+                    if (stGBatchRecord.getVoided().equals(VOID_TRUE)) {
+                        long inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_VREFUND_AMOUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_VREFUND_AMOUNT("0");
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_VREFUND_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_VREFUND_AMOUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_VREFUND_AMOUNT(String.valueOf(inCount + Long.parseLong(stGBatchRecord.getAmount())));
+                    } else {
+                        long inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT())) {
+                            cardCtsLabelObj.setTREPORT_T_CLT_REFUND_AMOUNT("0");
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardCtsLabelObj.getTREPORT_T_CLT_REFUND_AMOUNT());
+                        cardCtsLabelObj.setTREPORT_T_CLT_REFUND_AMOUNT(String.valueOf(inCount + Long.parseLong(stGBatchRecord.getAmount())));
+                    }
+
+                    if (stGBatchRecord.getVoided().equals(VOID_TRUE)) {
+                        long inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_VREFUND_COUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_VREFUND_COUNT("0");
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_VREFUND_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_VREFUND_COUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_VREFUND_COUNT(String.valueOf(inCount + 1));
+
+                        inCount = 0;//cardLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_VREFUND_AMOUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_VREFUND_AMOUNT("0");
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_VREFUND_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_VREFUND_AMOUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_VREFUND_AMOUNT(String.valueOf(inCount + Long.parseLong(stGBatchRecord.getAmount())));
+                    } else {
+                        long inCount = 0;//cardCtsLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_REFUND_COUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_REFUND_COUNT("0");
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_REFUND_COUNT());
+                        } else
+                            inCount = Integer.parseInt(cardLabelObj.getTREPORT_T_GRAND_REFUND_COUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_REFUND_COUNT(String.valueOf(inCount + 1));
+
+                        inCount = 0;//cardLabelObj.getTREPORT_T_CLT_VSALE_COUNT();
+                        if (AppUtils.isEmptyVal(cardLabelObj.getTREPORT_T_GRAND_REFUND_AMOUNT())) {
+                            cardLabelObj.setTREPORT_T_GRAND_REFUND_AMOUNT("0");
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_REFUND_AMOUNT());
+                        } else
+                            inCount = Long.parseLong(cardLabelObj.getTREPORT_T_GRAND_REFUND_AMOUNT());
+                        cardLabelObj.setTREPORT_T_GRAND_REFUND_AMOUNT(String.valueOf(inCount + Long.parseLong(stGBatchRecord.getAmount())));
+                    }
+
+
+                }
+
+                int ij = 0;
+                int inUpdateStatus = 0;
+                for (ij = 0; ij < cardLabelCtsArrayObj.size(); ij++) {//cardLabelCtsArrayObj=MASTERCARD
+                    CardCtsLabel localCardCtsLabel = cardLabelCtsArrayObj.get(ij);
+                    if (!AppUtils.isEmpty(localCardCtsLabel) && !AppUtils.isEmpty(localCardCtsLabel.getTREPORT_T_CLT_CARD_LABEL())) {
+                        if (localCardCtsLabel.getTREPORT_T_CLT_CARD_LABEL().equals(cardCtsLabelObj.getTREPORT_T_CLT_CARD_LABEL())) {
+                            cardLabelCtsArrayObj.set(ij, cardCtsLabelObj);
+                            inUpdateStatus = 1;
+                            break;
+                        }
+                    }
+                }
+                if (inUpdateStatus == 0)
+                    cardLabelCtsArrayObj.add(cardCtsLabelObj);
+
+                if (cardLabelArrayObj.size() > 0) {
+                    cardLabelArrayObj.set(0, cardLabelObj);
+                } else
+                    cardLabelArrayObj.add(cardLabelObj);
+
+
+                LmsPrintUtils.getInstance().generateLmsData(stGBatchRecord);
+            }
+
+            //Lms Settlement data
+            if (LmsPrintUtils.getInstance().isLmsDataInside) {
+                LmsSettleModel obj = new LmsSettleModel();
+                obj.setFullRdmCount(LmsPrintUtils.getInstance().rFCount);
+                obj.setFullRdmValue(LmsPrintUtils.getInstance().rFValue);
+
+                obj.setPartialRdmCount(LmsPrintUtils.getInstance().rPCount);
+                obj.setPartialRdmValue(LmsPrintUtils.getInstance().rPValue);
+
+                obj.setIssuedRdmCount(LmsPrintUtils.getInstance().rRewardCount);
+                obj.setIssuedRdmValue(LmsPrintUtils.getInstance().rRewardValue);
+
+                signatureTotals.setTLMS_DATA(new Gson().toJson(obj));
+            }
+
+
+            signatureTotals.setCardLabel(cardLabelArrayObj);
+            signatureTotals.setCardCtsLabel(cardLabelCtsArrayObj);
+
+            signatureDetails.setDREPORT_T_LINE_LIST(LOC_DREPORT_T_LINE_LIST);
+
+            Gson gson = new Gson();
+            String StringSignatureData = gson.toJson(signatureTotals);
+            return StringSignatureData;
+
+
+        } else if (PayUtils.getInstance().isBatchGroupEnabled(stGHDTStruct)) {
+
+
+            CardLabel cardLabel1 = new CardLabel();
+            cardLabel1.setTREPORT_T_GRAND_SALE_COUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_SALE_AMOUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_VSALE_COUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_VSALE_AMOUNT("0");
+
+            cardLabel1.setTREPORT_T_GRAND_REFUND_AMOUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_REFUND_COUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_VREFUND_COUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_VREFUND_AMOUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_TIP_AMOUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_TIP_COUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_SIGNED_REFUND_AMOUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_SIGNED_REFUND_COUNT("0");
+
+            cardLabel1.setTREPORT_T_GRAND_SIGNED_SALE_AMOUNT("0");
+            cardLabel1.setTREPORT_T_GRAND_SIGNED_SALE_AMOUNT("0");
+
+            cardLabelArrayObj.add(cardLabel1);
+            signatureTotals.setCardLabel(cardLabelArrayObj);
+            Gson gson = new Gson();
+            String StringSignatureData = gson.toJson(signatureTotals);
+            return StringSignatureData;
+
+        }
+        return null;
+
+
+    }
+
+
+}
